@@ -11,7 +11,6 @@ bool Object::loadObject(const std::string& path)
     std::ifstream file(path);
     if (!file.is_open()) return false;
 
-    // Reserve a bit to reduce reallocation cost
     vertices.reserve(6000);
     faces.reserve(12000);
 
@@ -58,14 +57,14 @@ bool Object::loadObject(const std::string& path)
 
     if (vertices.empty()) return true;
 
-    // Compute center and scale
+    // normalize and center
+
     Eigen::Vector3d center = 0.5 * (minVal + maxVal);
     Eigen::Vector3d size   = maxVal - minVal;
 
     double maxDim = size.maxCoeff();
     double scale = 1.0 / maxDim;
 
-    // Normalize positions
     for (auto& v : vertices)
     {
         v = (v - center) * scale;

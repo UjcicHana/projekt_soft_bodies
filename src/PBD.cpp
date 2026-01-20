@@ -14,7 +14,7 @@ void PBD::step()
 
     // --- Semi-implicit Euler ---
     for (auto& p : so.particles) {
-        p->v += timeStep * p->w * p->f;
+        p->v += timeStep * p->w * p->F;
         p->p = p->x + timeStep * p->v;
     }
 
@@ -29,6 +29,9 @@ void PBD::step()
 
         // Shape matching constraint (restores volume/shape)
         so.projectShapeMatching();
+
+        for (auto& c : so.volumeConstraints)
+            c->project();
     }
 
     // --- Velocity update ---

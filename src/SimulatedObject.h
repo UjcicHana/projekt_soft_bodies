@@ -8,7 +8,6 @@
 #include "Object.h"
 #include "Particle.h"
 #include "Constraint.h"
-#include <set>
 
 
 
@@ -20,12 +19,14 @@ public:
     // constraints
     std::vector<std::shared_ptr<DistanceConstraint>> distanceConstraints;
     std::vector<std::shared_ptr<CollisionConstraint>> collisionConstraints;
-    // shape matching (should be replaced with volume constraints)
+    std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
+    double volumeStiffness = 0.8;
     std::vector<Eigen::Vector3d> restPositions;
     double shapeMatchingStiffness = 0.5;
 
     void initializeFromObject(
         const Object& obj,
+        double ground = 0.0,
         double mass = 1.0,
         const Eigen::Vector3d& initialVelocity = Eigen::Vector3d::Zero(),
         const Eigen::Vector3d& initialTranslation = Eigen::Vector3d(0, 1.5, 0)
@@ -33,7 +34,7 @@ public:
 
     // build constraints
     void generateDistanceConstraints(double stiffness);
-    void generateCollisionConstraints();
+    void generateCollisionConstraints(double ground);
 
     // utils
     void calculateForces(const Eigen::Vector3d& gravity = Eigen::Vector3d(0, -9.8, 0));

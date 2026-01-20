@@ -77,4 +77,75 @@ void ShapeMatchingConstraint::print() const {
 
 }
 
+double VolumeConstraint::computeVolume() const
+{
+    double volume = 0.0;
+
+    for (const auto& f : faces) {
+        const Eigen::Vector3d& x0 = particles[f.x()]->p;
+        const Eigen::Vector3d& x1 = particles[f.y()]->p;
+        const Eigen::Vector3d& x2 = particles[f.z()]->p;
+
+        volume += x0.dot(x1.cross(x2));
+    }
+
+    return volume / 6.0;
+}
+
+void VolumeConstraint::project()
+{
+    double currentVolume = computeVolume();
+    double C = currentVolume - restVolume;
+
+    if (std::abs(C) < 1e-6)
+        return;
+
+    std::vector<Eigen::Vector3d> gradients(particles.size(),
+                                           Eigen::Vector3d::Zero());
+
+    // Compute gradients
+    for (const auto& f : faces) {
+        int i0 = f.x();
+        int i1 = f.y();
+        int i2 = f.z();
+
+        const Eigen::Vector3d& p0 = particles[i0]->p;
+        const Eigen::Vector3d& p1 = particles[i1]->p;
+        const Eigen::Vector3d& p2 = particles[i2]->p;
+
+        Eigen::Vector3d g0 = (p1.cross(p2)) / 6.0;
+        Eigen::Vector3d g1 = (p2.cross(p0)) / 6.0;
+        Eigen::Vector3d g2 = (p0.cross(p1)) / 6.0;
+
+        gradients[i0] += g0;
+        gradients[i1] += g1;
+        gradients[i2] += g2;
+    }
+
+    double denom = 0.0;
+    for (size_t i = 0; i < particles.size(); ++i) {
+        denom += particles[i]->w * gradients[i].squaredNorm();
+    }
+
+    if (denom < 1e-9)
+        return;
+
+    double lambda = -C / denom;
+
+    // Apply position corrections
+    for (size_t i = 0; i < particles.size(); ++i) {
+        particles[i]->p += stiffness * particles[i]->w * lambda * gradients[i];
+    }
+}
+
+void VolumeConstraint::print() const
+{
+    std::cout << "VolumeConstraint | restVolume = "
+              << restVolume
+              << ", stiffness = "
+              << stiffness
+              << "\n";
+}
+
+
 

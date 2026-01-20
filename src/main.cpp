@@ -126,6 +126,26 @@ int main(int argc, char* argv[]) {
 
     size_t vertexCount = vertexBuffer.size();
 
+    float ground = -1.0f;
+    std::vector<Eigen::Vector3f> groundGridVertices;
+
+    const float gridSize = 5.0f;
+    const int gridLines = 20;     // number of lines per axis
+    const float step = (2.0f * gridSize) / gridLines;
+
+    for (int i = 0; i <= gridLines; ++i) {
+        float x = -gridSize + i * step;
+        float z = -gridSize + i * step;
+
+        // Lines parallel to Z (vary X)
+        groundGridVertices.emplace_back(x, ground, -gridSize);
+        groundGridVertices.emplace_back(x, ground,  gridSize);
+
+        // Lines parallel to X (vary Z)
+        groundGridVertices.emplace_back(-gridSize, ground, z);
+        groundGridVertices.emplace_back( gridSize, ground, z);
+    }
+
     // ---------------------------
     // Shader setup
     // ---------------------------
@@ -175,6 +195,32 @@ int main(int argc, char* argv[]) {
 
     glEnable(GL_DEPTH_TEST);
 
+    GLuint gridVAO, gridVBO;
+    glGenVertexArrays(1, &gridVAO);
+    glGenBuffers(1, &gridVBO);
+
+    glBindVertexArray(gridVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
+
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        groundGridVertices.size() * sizeof(Eigen::Vector3f),
+        groundGridVertices.data(),
+        GL_STATIC_DRAW
+    );
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(Eigen::Vector3f),
+        (void*)0
+    );
+
+    glBindVertexArray(0);
+
     // ---------------------------
     // Projection matrix
     // ---------------------------
@@ -192,7 +238,7 @@ int main(int argc, char* argv[]) {
 
     float dt = 1.0f / 120.0f;
 
-    PBD pbd(obj, dt);
+    PBD pbd(obj, ground, dt);
 
     auto updateVertexBufferFromParticles =
     [&](PBD& pbd)
@@ -265,6 +311,19 @@ int main(int argc, char* argv[]) {
         Eigen::Affine3f view = Eigen::Affine3f::Identity();
         view.translate(Eigen::Vector3f(0, 0, -4));
         Eigen::Matrix4f mvp = proj * view.matrix();
+
+        glUseProgram(shader);
+
+        // MVP already computed
+        GLint mvpLoc = glGetUniformLocation(shader, "uMVP");
+        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data());
+
+        // Grid color (subtle)
+        GLint colorLoc = glGetUniformLocation(shader, "uColor");
+        glUniform3f(colorLoc, 1.0f, 0.0f, 0.0f);
+
+        glBindVertexArray(gridVAO);
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(groundGridVertices.size()));
 
         glUseProgram(shader);
         GLint loc = glGetUniformLocation(shader, "uMVP");

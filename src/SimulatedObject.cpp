@@ -3,9 +3,11 @@
 //
 
 #include "SimulatedObject.h"
+#include <set>
 
 void SimulatedObject::initializeFromObject(
     const Object& obj,
+    double ground,
     double mass,
     const Eigen::Vector3d& initialVelocity,
     const Eigen::Vector3d& initialTranslation)
@@ -21,7 +23,7 @@ void SimulatedObject::initializeFromObject(
         p->p = p->x;
 
         p->v = initialVelocity;
-        p->f.setZero();
+        p->F.setZero();
 
         p->m = mass;
         p->w = (p->m > 0.0) ? 1.0 / p->m : 0.0;
@@ -33,7 +35,12 @@ void SimulatedObject::initializeFromObject(
     faces = obj.getFaces();
 
     generateDistanceConstraints(0.7);
-    generateCollisionConstraints();
+    generateCollisionConstraints(ground);
+    volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
+    particles,
+    faces,
+    volumeStiffness
+));
 }
 
 void SimulatedObject::generateDistanceConstraints(double stiffness) {
@@ -77,14 +84,14 @@ void SimulatedObject::generateDistanceConstraints(double stiffness) {
 }
 
 
-void SimulatedObject::generateCollisionConstraints() {
+void SimulatedObject::generateCollisionConstraints(double ground) {
     collisionConstraints.clear();
     Eigen::Vector3d normal(0, 1, 0);
 
     for (const auto& p : particles) {
         collisionConstraints.push_back(
             std::make_shared<CollisionConstraint>(
-                p, normal, 0.0
+                p, normal, ground
             )
         );
     }
@@ -131,6 +138,6 @@ void SimulatedObject::calculateForces(const Eigen::Vector3d& gravity) {
 
     for (auto particle : particles)
     {
-        particle->f = particle->m * gravity;
+        particle->F = particle->m * gravity;
     }
 }

@@ -5,7 +5,6 @@
 #ifndef PBD_H
 #define PBD_H
 
-#include <utility>
 #include "SimulatedObject.h"
 
 class PBD {
@@ -13,8 +12,8 @@ class PBD {
     int solverIterations = 10;
     SimulatedObject so;
     public:
-    explicit PBD(Object& obj, double time_step) : timeStep(time_step) {
-        so.initializeFromObject(obj);
+    explicit PBD(Object& obj, double ground, double time_step) : timeStep(time_step) {
+        so.initializeFromObject(obj, ground);
     };
     void resetSimulation(Object& obj);
     void step();

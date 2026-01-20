@@ -30,8 +30,7 @@ public:
         std::shared_ptr<Particle> a,
         std::shared_ptr<Particle> b,
         double k = 1.0
-    )
-        : p1(std::move(a)), p2(std::move(b)), stiffness(k)
+    ) : p1(std::move(a)), p2(std::move(b)), stiffness(k)
     {
         restLength = (p1->x - p2->x).norm();
     }
@@ -44,16 +43,14 @@ class CollisionConstraint : public Constraint {
 public:
     std::shared_ptr<Particle> p;
     Eigen::Vector3d normal;
-    double offset;    // plane: n·x = offset
-    double friction;  // optional
+    double offset;
+    double friction;
 
     CollisionConstraint(
         std::shared_ptr<Particle> particle,
         const Eigen::Vector3d& n,
         double d
-    )
-        : p(std::move(particle)), normal(n.normalized()), offset(d), friction(0.0)
-    {}
+    ) : p(std::move(particle)), normal(n.normalized()), offset(d), friction(0.0) {}
 
     void project() override;
     void print() const override;
@@ -67,6 +64,29 @@ public:
 
     void project() override;
     void print() const override;
+};
+
+class VolumeConstraint : public Constraint {
+public:
+    std::vector<std::shared_ptr<Particle>> particles;
+    std::vector<Eigen::Vector3i> faces;
+    double restVolume;
+    double stiffness;
+
+    VolumeConstraint(
+        const std::vector<std::shared_ptr<Particle>>& ps,
+        const std::vector<Eigen::Vector3i>& fs,
+        double k = 1.0
+    ) : particles(ps), faces(fs), stiffness(k)
+    {
+        restVolume = computeVolume();
+    }
+
+    void project() override;
+    void print() const override;
+
+private:
+    double computeVolume() const;
 };
 
 
