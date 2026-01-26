@@ -9,20 +9,20 @@
 #include "Particle.h"
 #include "Constraint.h"
 
-
-
 class SimulatedObject {
 public:
-    // object
+    // object (changes through time)
     std::vector<std::shared_ptr<Particle>> particles;
     std::vector<Eigen::Vector3i> faces;
     // constraints
-    std::vector<std::shared_ptr<DistanceConstraint>> distanceConstraints;
+    std::vector<std::shared_ptr<Constraint>> constraints;
     std::vector<std::shared_ptr<CollisionConstraint>> collisionConstraints;
-    std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
+
+    double distanceStiffness = 0.7;
     double volumeStiffness = 0.8;
     std::vector<Eigen::Vector3d> restPositions;
     double shapeMatchingStiffness = 0.5;
+    Eigen::Vector3d outsideForces = Eigen::Vector3d(0, -9.8, 0); // default just gravity
 
     void initializeFromObject(
         const Object& obj,
@@ -37,8 +37,7 @@ public:
     void generateCollisionConstraints(double ground);
 
     // utils
-    void calculateForces(const Eigen::Vector3d& gravity = Eigen::Vector3d(0, -9.8, 0));
-    void projectShapeMatching();
+    void calculateForces(const Eigen::Vector3d& outsideForces) const;
 
 };
 

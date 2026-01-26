@@ -24,7 +24,11 @@ struct SimulationUI {
     int solverIterations = 10;
 
     float distanceStiffness = 0.7f;
+    float volumeStiffness = 0.8f;
     float shapeMatchingStiffness = 0.5f;
+
+    float gravityX = 0;
+    float gravityY = -9.8f;
 };
 
 GLuint compileShader(const char* src, GLenum type) {
@@ -271,30 +275,55 @@ int main(int argc, char* argv[]) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        ImGui::SetNextWindowSize(ImVec2(360, 350), ImGuiCond_Once);
         ImGui::Begin("Simulation Controls");
 
-        ImGui::Checkbox("Run simulation", &ui.runSimulation);
+        ImGui::Checkbox("Run Simulation", &ui.runSimulation);
 
         ImGui::Separator();
         ImGui::Text("Time Integration");
-        ImGui::SliderFloat("Time step", &ui.timeStep, 0.001f, 0.02f);
-        ImGui::SliderInt("Solver iterations", &ui.solverIterations, 1, 50);
+
+        ImGui::SliderFloat("Time Step", &ui.timeStep, 0.0005f, 0.02f, "%.5f");
+
+        ImGui::SliderInt("Solver Iterations", &ui.solverIterations, 1, 50);
 
         ImGui::Separator();
         ImGui::Text("Soft Body Parameters");
-        ImGui::SliderFloat("Distance stiffness", &ui.distanceStiffness, 0.0f, 1.0f);
-        ImGui::SliderFloat("Shape matching stiffness", &ui.shapeMatchingStiffness, 0.0f, 1.0f);
+
+        ImGui::SliderFloat("Distance Stiffness", &ui.distanceStiffness, 0.0f, 1.0f);
+
+        ImGui::SliderFloat("Volume Stiffness", &ui.volumeStiffness, 0.0f, 1.0f);
+
+        ImGui::SliderFloat("Shape Matching Stiffness", &ui.shapeMatchingStiffness, 0.0f, 1.0f);
+
+        ImGui::Separator();
+        ImGui::Text("Gravity");
+
+        ImGui::SliderFloat("Gravity X", &ui.gravityX, -50.0f, 20.0f);
+
+        ImGui::SliderFloat("Gravity Y", &ui.gravityY, -50.0f, 20.0f);
+
+        if (ImGui::Button("Reset Gravity")) {
+            ui.gravityX = 0.0f;
+            ui.gravityY = -9.8f;
+        }
 
         ImGui::Separator();
 
         if (ImGui::Button("Reset Simulation")) {
-            pbd.resetSimulation(obj);
+            pbd.resetSimulation(obj, ground);
         }
 
         ImGui::End();
 
+        Eigen::Vector3d gravity = Eigen::Vector3d(ui.gravityX, ui.gravityY, 0);
+
         pbd.setTimeStep(ui.timeStep);
         pbd.setSolverIterations(ui.solverIterations);
+        pbd.setDistanceStiffness(ui.distanceStiffness);
+        pbd.setVolumeStiffness(ui.volumeStiffness);
+        pbd.setShapeMatchingStiffness(ui.shapeMatchingStiffness);
+        pbd.setOutsideForces(gravity);
 
         glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

@@ -34,13 +34,20 @@ void SimulatedObject::initializeFromObject(
 
     faces = obj.getFaces();
 
-    generateDistanceConstraints(0.7);
+    constraints.clear();
+
+    generateDistanceConstraints(distanceStiffness);
     generateCollisionConstraints(ground);
-    volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
+    constraints.push_back(std::make_shared<VolumeConstraint>(
     particles,
     faces,
-    volumeStiffness
-));
+    volumeStiffness));
+    constraints.push_back(std::make_shared<ShapeMatchingConstraint>(
+    particles,
+    restPositions,
+    shapeMatchingStiffness));
+
+    calculateForces(outsideForces);
 }
 
 void SimulatedObject::generateDistanceConstraints(double stiffness) {
@@ -58,10 +65,8 @@ void SimulatedObject::generateDistanceConstraints(double stiffness) {
         }
     }
 
-    distanceConstraints.clear();
-
     for (auto& e : edges) {
-        distanceConstraints.push_back(
+        constraints.push_back(
             std::make_shared<DistanceConstraint>(
                 particles[e.first],
                 particles[e.second],
@@ -69,18 +74,6 @@ void SimulatedObject::generateDistanceConstraints(double stiffness) {
             )
         );
     }
-
-    /*std::cout << "Distance constraints:\n";
-
-    int i = 0;
-    for (const auto& c : distanceConstraints) {
-        std::cout << "  [" << i++ << "] ";
-        c->print();
-    }
-
-    std::cout << "Total distance constraints: "
-              << distanceConstraints.size()
-              << "\n";*/
 }
 
 
@@ -95,49 +88,12 @@ void SimulatedObject::generateCollisionConstraints(double ground) {
             )
         );
     }
-
-    if (collisionConstraints.empty()) return;
-
-    /*std::cout << "Collision constraints:\n";
-
-    int i = 0;
-    for (const auto& c : collisionConstraints) {
-        std::cout << "  [" << i++ << "] ";
-        c->print();
-    }
-
-    std::cout << "Total collision constraints: "
-              << collisionConstraints.size()
-              << "\n";*/
 }
 
-void SimulatedObject::projectShapeMatching()
-{
-    // Compute center of mass of current positions
-    Eigen::Vector3d cm = Eigen::Vector3d::Zero();
-    for (auto& p : particles)
-        cm += p->p;
-    cm /= particles.size();
+void SimulatedObject::calculateForces(const Eigen::Vector3d& outsideForces) const {
 
-    // Compute center of mass of rest positions
-    Eigen::Vector3d cmRest = Eigen::Vector3d::Zero();
-    for (auto& r : restPositions)
-        cmRest += r;
-    cmRest /= restPositions.size();
-
-    // Compute goal positions (rigid transform approximation)
-    for (size_t i = 0; i < particles.size(); ++i)
+    for (const auto& particle : particles)
     {
-        Eigen::Vector3d goal = particles[i]->p + shapeMatchingStiffness * (restPositions[i] + (cm - cmRest) - particles[i]->p);
-        particles[i]->p = goal;
-    }
-}
-
-void SimulatedObject::calculateForces(const Eigen::Vector3d& gravity) {
-    // in this case just gravity
-
-    for (auto particle : particles)
-    {
-        particle->F = particle->m * gravity;
+        particle->F = particle->m * outsideForces;
     }
 }

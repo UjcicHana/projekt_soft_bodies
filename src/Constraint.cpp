@@ -62,20 +62,33 @@ void CollisionConstraint::print() const
               << "\n";
 }
 
-void ShapeMatchingConstraint::project()  {
+void ShapeMatchingConstraint::project() {
+    if (particles.empty()) return;
+
     Eigen::Vector3d cm = Eigen::Vector3d::Zero();
-    for (auto& p : particles) cm += p->p;
-    cm /= particles.size();
+    for (const auto& p : particles)
+        cm += p->p;
+    cm = cm / particles.size();
+
+    Eigen::Vector3d cmRest = Eigen::Vector3d::Zero();
+    for (const auto& r : restPositions)
+        cmRest += r;
+    cmRest = cmRest / restPositions.size();
 
     for (size_t i = 0; i < particles.size(); ++i) {
-        Eigen::Vector3d goal = cm + restPositions[i];
+        Eigen::Vector3d goal =
+            cm + (restPositions[i] - cmRest);
+
         particles[i]->p += stiffness * (goal - particles[i]->p);
     }
 }
 
 void ShapeMatchingConstraint::print() const {
-
-}
+        std::cout << "ShapeMatchingConstraint: "
+                  << particles.size()
+                  << " particles, stiffness = "
+                  << stiffness << "\n";
+    }
 
 double VolumeConstraint::computeVolume() const
 {

@@ -19,7 +19,7 @@ public:
     virtual void print() const = 0;
 };
 
-class DistanceConstraint : public Constraint {
+class DistanceConstraint final : public Constraint {
 public:
     std::shared_ptr<Particle> p1;
     std::shared_ptr<Particle> p2;
@@ -39,7 +39,7 @@ public:
     void print() const override;
 };
 
-class CollisionConstraint : public Constraint {
+class CollisionConstraint final : public Constraint {
 public:
     std::shared_ptr<Particle> p;
     Eigen::Vector3d normal;
@@ -56,17 +56,26 @@ public:
     void print() const override;
 };
 
-class ShapeMatchingConstraint : public Constraint {
+class ShapeMatchingConstraint final : public Constraint {
 public:
     std::vector<std::shared_ptr<Particle>> particles;
     std::vector<Eigen::Vector3d> restPositions;
     double stiffness;
 
+    ShapeMatchingConstraint(
+        const std::vector<std::shared_ptr<Particle>>& ps,
+        const std::vector<Eigen::Vector3d>& rest,
+        double k
+    )
+        : particles(ps), restPositions(rest), stiffness(k)
+    {}
+
     void project() override;
     void print() const override;
 };
 
-class VolumeConstraint : public Constraint {
+
+class VolumeConstraint final : public Constraint {
 public:
     std::vector<std::shared_ptr<Particle>> particles;
     std::vector<Eigen::Vector3i> faces;
