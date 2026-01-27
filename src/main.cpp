@@ -31,6 +31,31 @@ struct SimulationUI {
     float gravityY = -9.8f;
 };
 
+void computeVertexNormals(
+    const std::vector<std::shared_ptr<Particle>>& particles,
+    const std::vector<Eigen::Vector3i>& faces,
+    std::vector<Eigen::Vector3f>& normals
+) {
+    normals.assign(particles.size(), Eigen::Vector3f::Zero());
+
+    for (const auto& f : faces) {
+        Eigen::Vector3f p0 = particles[f.x()]->x.cast<float>();
+        Eigen::Vector3f p1 = particles[f.y()]->x.cast<float>();
+        Eigen::Vector3f p2 = particles[f.z()]->x.cast<float>();
+
+        Eigen::Vector3f n = (p1 - p0).cross(p2 - p0);
+
+        normals[f.x()] += n;
+        normals[f.y()] += n;
+        normals[f.z()] += n;
+    }
+
+    for (auto& n : normals) {
+        if (n.norm() > 1e-6f)
+            n.normalize();
+    }
+}
+
 GLuint compileShader(const char* src, GLenum type) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, nullptr);
@@ -77,7 +102,7 @@ int main(int argc, char* argv[]) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     GLFWwindow* window =
-        glfwCreateWindow(800, 600, "Soft body animation", nullptr, nullptr);
+        glfwCreateWindow(1000, 600, "Soft body animation", nullptr, nullptr);
 
     if (!window) {
         std::cerr << "Failed to create window\n";
@@ -115,21 +140,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // ---------------------------
-    // Convert mesh to flat vertex array
-    // ---------------------------
-    std::vector<Eigen::Vector3f> vertexBuffer;
-    vertexBuffer.reserve(obj.getFaces().size() * 3);
-
-    for (auto& f : obj.getFaces()) {
-        auto vertices = obj.getVertices();
-        vertexBuffer.emplace_back(vertices[f.x()].cast<float>());
-        vertexBuffer.emplace_back(vertices[f.y()].cast<float>());
-        vertexBuffer.emplace_back(vertices[f.z()].cast<float>());
-    }
-
-    size_t vertexCount = vertexBuffer.size();
-
     float ground = -1.0f;
     std::vector<Eigen::Vector3f> groundGridVertices;
 
@@ -150,23 +160,79 @@ int main(int argc, char* argv[]) {
         groundGridVertices.emplace_back( gridSize, ground, z);
     }
 
+    float dt = 1.0f / 120.0f;
+
+    PBD pbd(obj, ground, dt);
+
+    struct Vertex {
+        Eigen::Vector3f position;
+        Eigen::Vector3f normal;
+    };
+    std::vector<Vertex> vertexBuffer;
+
+    const auto& particles = pbd.getParticles();
+    std::vector<Eigen::Vector3f> normals;
+    computeVertexNormals(particles, obj.getFaces(), normals);
+
+    vertexBuffer.clear();
+    vertexBuffer.reserve(obj.getFaces().size() * 3);
+
+    for (const auto& f : obj.getFaces()) {
+        vertexBuffer.push_back({ particles[f.x()]->x.cast<float>(), normals[f.x()] });
+        vertexBuffer.push_back({ particles[f.y()]->x.cast<float>(), normals[f.y()] });
+        vertexBuffer.push_back({ particles[f.z()]->x.cast<float>(), normals[f.z()] });
+    }
+
+    // for (size_t i = 0; i < vertexBuffer.size(); ++i) {
+    //     std::cout << "Vertex " << i << " position: " << vertexBuffer[i].position.x() << " " << vertexBuffer[i].position.y() << " " << vertexBuffer[i].position.z() << std::endl;
+    //     std::cout << "Vertex " << i << " normal: " << vertexBuffer[i].normal.x() << " " << vertexBuffer[i].normal.y() << " " << vertexBuffer[i].normal.z() << std::endl;
+    // }
+
+    size_t vertexCount = vertexBuffer.size();
+
     // ---------------------------
     // Shader setup
     // ---------------------------
     const char* vsSrc = R"(
         #version 460 core
+
         layout (location = 0) in vec3 aPos;
+        layout (location = 1) in vec3 aNormal;
+
         uniform mat4 uMVP;
+        uniform mat4 uModel;
+
+        out vec3 vNormal;
+        out vec3 vWorldPos;
+
         void main() {
+            vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
+            vNormal = normalize(mat3(uModel) * aNormal);
             gl_Position = uMVP * vec4(aPos, 1.0);
         }
     )";
 
     const char* fsSrc = R"(
         #version 460 core
+
+        in vec3 vNormal;
+        in vec3 vWorldPos;
+
         out vec4 FragColor;
+
+        uniform vec3 uLightDir;  // e.g. (0, -1, 0)
+        uniform vec3 uColor;
+
         void main() {
-            FragColor = vec4(0.7, 0.8, 1.0, 1.0);
+            vec3 N = normalize(vNormal);
+            vec3 L = normalize(-uLightDir);
+
+            float diff = max(dot(N, L), 0.0);
+
+            vec3 ambient = 0.2 * uColor;
+            vec3 diffuse = diff * uColor;
+
+            FragColor = vec4(ambient + diffuse, 1.0);
         }
     )";
 
@@ -183,21 +249,28 @@ int main(int argc, char* argv[]) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
     glBufferData(GL_ARRAY_BUFFER,
-                 vertexCount * sizeof(Eigen::Vector3f),
+                 vertexCount * sizeof(Vertex),
                  vertexBuffer.data(),
                  GL_STATIC_DRAW);
 
-    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(0); // position
     glVertexAttribPointer(
-        0,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        sizeof(Eigen::Vector3f),
-        (void*)0
+        0, 3, GL_FLOAT, GL_FALSE,
+        sizeof(Vertex),
+        (void*)offsetof(Vertex, position)
     );
 
+    glEnableVertexAttribArray(1); // normal
+    glVertexAttribPointer(
+        1, 3, GL_FLOAT, GL_FALSE,
+        sizeof(Vertex),
+        (void*)offsetof(Vertex, normal)
+    );
+
+
     glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
 
     GLuint gridVAO, gridVBO;
     glGenVertexArrays(1, &gridVAO);
@@ -240,27 +313,27 @@ int main(int argc, char* argv[]) {
             0,        0,  (far+near)/(near-far),     (2*far*near)/(near-far),
             0,        0, -1,                          0;
 
-    float dt = 1.0f / 120.0f;
-
-    PBD pbd(obj, ground, dt);
 
     auto updateVertexBufferFromParticles =
     [&](PBD& pbd)
     {
         const auto& particles = pbd.getParticles();
+        std::vector<Eigen::Vector3f> normals;
+
+        computeVertexNormals(particles, obj.getFaces(), normals);
 
         size_t idx = 0;
         for (const auto& f : obj.getFaces()) {
-            vertexBuffer[idx++] = particles[f.x()]->x.cast<float>();
-            vertexBuffer[idx++] = particles[f.y()]->x.cast<float>();
-            vertexBuffer[idx++] = particles[f.z()]->x.cast<float>();
+            vertexBuffer[idx++] = { particles[f.x()]->x.cast<float>(), normals[f.x()] };
+            vertexBuffer[idx++] = { particles[f.y()]->x.cast<float>(), normals[f.y()] };
+            vertexBuffer[idx++] = { particles[f.z()]->x.cast<float>(), normals[f.z()] };
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferSubData(
             GL_ARRAY_BUFFER,
             0,
-            vertexBuffer.size() * sizeof(Eigen::Vector3f),
+            vertexBuffer.size() * sizeof(Vertex),
             vertexBuffer.data()
         );
     };
@@ -341,24 +414,34 @@ int main(int argc, char* argv[]) {
         view.translate(Eigen::Vector3f(0, 0, -4));
         Eigen::Matrix4f mvp = proj * view.matrix();
 
+        Eigen::Matrix4f model = Eigen::Matrix4f::Identity();
+
         glUseProgram(shader);
 
-        // MVP already computed
-        GLint mvpLoc = glGetUniformLocation(shader, "uMVP");
-        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data());
+        glUniformMatrix4fv(
+            glGetUniformLocation(shader, "uMVP"),
+            1, GL_FALSE, mvp.data()
+        );
 
-        // Grid color (subtle)
-        GLint colorLoc = glGetUniformLocation(shader, "uColor");
-        glUniform3f(colorLoc, 1.0f, 0.0f, 0.0f);
+        glUniformMatrix4fv(
+            glGetUniformLocation(shader, "uModel"),
+            1, GL_FALSE, model.data()
+        );
+
+        glUniform3f(
+            glGetUniformLocation(shader, "uLightDir"),
+            0.0f, -1.0f, -2.0f
+        );
+
+        glUniform3f(glGetUniformLocation(shader, "uColor"), 1.0f, 1.0f, 1.0f);
 
         glBindVertexArray(gridVAO);
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(groundGridVertices.size()));
 
-        glUseProgram(shader);
-        GLint loc = glGetUniformLocation(shader, "uMVP");
-        glUniformMatrix4fv(loc, 1, GL_FALSE, mvp.data());
+        glUniform3f(glGetUniformLocation(shader, "uColor"), 0.7f, 0.7f, 0.7f);
 
         glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount));
 
         ImGui::Render();
