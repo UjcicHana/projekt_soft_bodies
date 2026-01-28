@@ -116,7 +116,6 @@ void VolumeConstraint::project()
     std::vector<Eigen::Vector3d> gradients(particles.size(),
                                            Eigen::Vector3d::Zero());
 
-    // Compute gradients
     for (const auto& f : faces) {
         int i0 = f.x();
         int i1 = f.y();
@@ -145,7 +144,6 @@ void VolumeConstraint::project()
 
     double lambda = -C / denom;
 
-    // Apply position corrections
     for (size_t i = 0; i < particles.size(); ++i) {
         particles[i]->p += stiffness * particles[i]->w * lambda * gradients[i];
     }

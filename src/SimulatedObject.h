@@ -29,7 +29,7 @@ public:
         double ground = 0.0,
         double mass = 1.0,
         const Eigen::Vector3d& initialVelocity = Eigen::Vector3d::Zero(),
-        const Eigen::Vector3d& initialTranslation = Eigen::Vector3d(0, 1.5, 0)
+        const Eigen::Vector3d& initialTranslation = Eigen::Vector3d(1.0, 1.5, 0)
     );
 
     // build constraints

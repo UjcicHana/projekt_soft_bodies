@@ -46,7 +46,9 @@ add_executable(projekt_soft_bodies
         src/SimulatedObject.cpp
         src/PBD.h
         src/PBD.cpp
-        ${IMGUI_SOURCES})
+        ${IMGUI_SOURCES}
+        src/Renderer.cpp
+        src/Renderer.h)
 
 target_link_libraries(projekt_soft_bodies
         glad

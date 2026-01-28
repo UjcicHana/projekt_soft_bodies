@@ -5,6 +5,18 @@
 #include "SimulatedObject.h"
 #include <set>
 
+Eigen::Matrix3d rotationX(double angleRadians)
+{
+    double c = std::cos(angleRadians);
+    double s = std::sin(angleRadians);
+
+    Eigen::Matrix3d R;
+    R << 1,  0, 0,
+         0,  c, -s,
+         0,  s,  c;
+    return R;
+}
+
 void SimulatedObject::initializeFromObject(
     const Object& obj,
     double ground,
@@ -15,11 +27,21 @@ void SimulatedObject::initializeFromObject(
     particles.clear();
     restPositions.clear();
 
+    double angleDeg = 0.0;
+    double angleRad = angleDeg * M_PI / 180.0;
+    Eigen::Matrix3d R = rotationX(angleRad);
+
+    Eigen::Vector3d center = Eigen::Vector3d::Zero();
+    for (auto& v : obj.getVertices())
+        center += v;
+    center /= obj.getVertices().size();
+
     for (const auto& vertex : obj.getVertices())
     {
         auto p = std::make_shared<Particle>();
 
-        p->x = vertex + initialTranslation;
+        Eigen::Vector3d rotated = R * (vertex - center) + center;
+        p->x = rotated + initialTranslation;
         p->p = p->x;
 
         p->v = initialVelocity;
