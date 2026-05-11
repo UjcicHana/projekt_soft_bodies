@@ -1,12 +1,15 @@
 //
-// Created by hana on 12/1/25.
+// Created by hana on 5/7/26.
 //
 
-#include "PBD.h"
+#include "Solver.h"
 
-#include <iostream>
-
-void PBD::step() const {
+void Solver::step() const {
+    if (so.algorithmType == AlgorithmType::XPBD)
+    {
+        for (auto& c : so.constraints)
+            c->lambda = 0.0;
+    }
 
     for (auto& p : so.particles) {
         p->v += timeStep * p->w * p->F;
@@ -16,10 +19,10 @@ void PBD::step() const {
     for (int iter = 0; iter < solverIterations; ++iter) {
 
         for (auto& c : so.constraints)
-            c->project();
+            c->project(so.algorithmType, 0.0);
 
         for (auto& c : so.collisionConstraints)
-            c->project();
+            c->project(so.algorithmType, 0.0);
     }
 
     for (auto& p : so.particles) {
@@ -28,9 +31,8 @@ void PBD::step() const {
     }
 }
 
-void PBD::resetSimulation(Object& obj, double ground) {
+void Solver::resetSimulation(Object& obj, double ground) {
     so.initializeFromObject(obj, ground);
 }
-
 
 

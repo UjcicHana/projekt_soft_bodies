@@ -22,8 +22,10 @@ void SimulatedObject::initializeFromObject(
     double ground,
     double mass,
     const Eigen::Vector3d& initialVelocity,
-    const Eigen::Vector3d& initialTranslation)
+    const Eigen::Vector3d& initialTranslation,
+    AlgorithmType at)
 {
+    algorithmType = at;
     particles.clear();
     restPositions.clear();
 

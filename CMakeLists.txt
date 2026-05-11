@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 # OPENGL
 add_library(glad src/glad.c)
-target_include_directories(glad PUBLIC include)
+target_include_directories(glad PUBLIC external)
 
 # GLFW
 find_package(PkgConfig REQUIRED)
@@ -44,18 +44,18 @@ add_executable(projekt_soft_bodies
         src/Object.cpp
         src/SimulatedObject.h
         src/SimulatedObject.cpp
-        src/PBD.h
-        src/PBD.cpp
         ${IMGUI_SOURCES}
         src/Renderer.cpp
-        src/Renderer.h)
+        src/Renderer.h
+        src/Solver.cpp
+        src/Solver.h)
 
 target_link_libraries(projekt_soft_bodies
         glad
         ${GLFW_LIBRARIES}
-        dl       # needed for GLAD on Linux
-        GL       # OpenGL
-        m        # math library
+        dl
+        GL
+        m
 )
 
 

@@ -15,7 +15,7 @@
 #include <string>
 
 #include "Object.h"
-#include "PBD.h"
+#include "Solver.h"
 #include "Renderer.h"
 
 struct SimulationUI {
@@ -26,14 +26,14 @@ struct SimulationUI {
     int solverIterations = 10;
 
     float distanceStiffness = 0.7f;
-    float volumeStiffness = 0.8f;
-    float shapeMatchingStiffness = 0.5f;
+    float volumeStiffness = 0.2f;
+    float shapeMatchingStiffness = 0.1f;
 
     float gravityX = 0;
     float gravityY = -9.8f;
 } ui;
 
-void drawUI(PBD& pbd) {
+void drawUI() {
     ImGui::SetNextWindowSize(ImVec2(360, 310), ImGuiCond_Once);
     ImGui::Begin("Simulation Controls");
 
@@ -92,10 +92,6 @@ void drawUI(PBD& pbd) {
     ImGui::End();
 }
 
-void framebufferCallback(GLFWwindow*, int w, int h) {
-    glViewport(0, 0, w, h);
-}
-
 int main(int argc, char* argv[]) {
 
     if (!glfwInit()) {
@@ -115,6 +111,10 @@ int main(int argc, char* argv[]) {
         glfwTerminate();
         return -1;
     }
+
+    auto framebufferCallback = [](GLFWwindow*, int w, int h) {
+        glViewport(0, 0, w, h);
+    };
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebufferCallback);
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
 
     float dt = 1.0f / 120.0f;
 
-    PBD pbd(obj, ground, dt);
+    Solver pbd(obj, ground, dt);
     Renderer renderer = Renderer();
     renderer.initGrid(ground);
     renderer.initMesh(pbd.getParticles(), obj.getFaces());
@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        drawUI(pbd);
+        drawUI();
 
         Eigen::Vector3d gravity = Eigen::Vector3d(ui.gravityX, ui.gravityY, 0);
 

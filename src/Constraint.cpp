@@ -6,11 +6,10 @@
 
 #include <iostream>
 
-Constraint::Constraint() = default;
 Constraint::~Constraint() = default;
 
-void DistanceConstraint::project() {
 
+void DistanceConstraint::project(AlgorithmType algorithmType, double dt) {
     Eigen::Vector3d dir = p1->p - p2->p;
     double len = dir.norm();
 
@@ -24,11 +23,25 @@ void DistanceConstraint::project() {
     double wSum = w1 + w2;
 
     if (wSum == 0.0) return;
+    Eigen::Vector3d deltaX;
 
-    Eigen::Vector3d correction = stiffness * (C / wSum) * n;
+    switch (algorithmType) {
+        case AlgorithmType::PBD:
+            deltaX = stiffness * (C / wSum) * n;
+            break;
+        case AlgorithmType::XPBD:
+            double alphaTilde = compliance / (dt * dt);
 
-    p1->p -= w1 * correction;
-    p2->p += w2 * correction;
+            double deltaLambda = (-C - alphaTilde * lambda) / (wSum + alphaTilde);
+
+            lambda += deltaLambda;
+
+            deltaX =  deltaLambda * n;
+            break;
+    }
+
+    p1->p -= w1 * deltaX;
+    p2->p += w2 * deltaX;
 }
 
 void DistanceConstraint::print() const
@@ -41,7 +54,7 @@ void DistanceConstraint::print() const
               << "\n";
 }
 
-void CollisionConstraint::project() {
+void CollisionConstraint::project(AlgorithmType algorithmType, double dt) {
 
     double penetration = normal.dot(p->p) - offset;
 
@@ -62,7 +75,7 @@ void CollisionConstraint::print() const
               << "\n";
 }
 
-void ShapeMatchingConstraint::project() {
+void ShapeMatchingConstraint::project(AlgorithmType algorithmType, double dt) {
     if (particles.empty()) return;
 
     Eigen::Vector3d cm = Eigen::Vector3d::Zero();
@@ -75,11 +88,17 @@ void ShapeMatchingConstraint::project() {
         cmRest += r;
     cmRest = cmRest / restPositions.size();
 
+    double alpha = 1.0;
+
+    if (algorithmType == AlgorithmType::XPBD) {
+        alpha = 1.0 / (1.0 + compliance / (dt * dt));
+    }
+
     for (size_t i = 0; i < particles.size(); ++i) {
         Eigen::Vector3d goal =
             cm + (restPositions[i] - cmRest);
 
-        particles[i]->p += stiffness * (goal - particles[i]->p);
+        particles[i]->p += alpha * stiffness * (goal - particles[i]->p);
     }
 }
 
@@ -105,7 +124,7 @@ double VolumeConstraint::computeVolume() const
     return volume / 6.0;
 }
 
-void VolumeConstraint::project()
+void VolumeConstraint::project(AlgorithmType algorithmType, double dt)
 {
     double currentVolume = computeVolume();
     double C = currentVolume - restVolume;
@@ -142,11 +161,31 @@ void VolumeConstraint::project()
     if (denom < 1e-9)
         return;
 
-    double lambda = -C / denom;
+    double deltaLambda;
+    switch (algorithmType) {
+        case AlgorithmType::PBD:
+            deltaLambda = -C / denom;
 
-    for (size_t i = 0; i < particles.size(); ++i) {
-        particles[i]->p += stiffness * particles[i]->w * lambda * gradients[i];
+            for (size_t i = 0; i < particles.size(); ++i) {
+                particles[i]->p += stiffness * particles[i]->w * deltaLambda * gradients[i];
+            }
+
+            break;
+        case AlgorithmType::XPBD:
+            double alphaTilde =
+            compliance / (dt * dt);
+
+            deltaLambda = (-C - alphaTilde * lambda)
+                / (denom + alphaTilde);
+
+            lambda += deltaLambda;
+
+            for (size_t i = 0; i < particles.size(); ++i) {
+                particles[i]->p += particles[i]->w * deltaLambda * gradients[i];
+            }
+            break;
     }
+
 }
 
 void VolumeConstraint::print() const

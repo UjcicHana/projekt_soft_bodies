@@ -1,18 +1,18 @@
 //
-// Created by hana on 12/1/25.
+// Created by hana on 5/7/26.
 //
 
-#ifndef PBD_H
-#define PBD_H
+#ifndef SOLVER_H
+#define SOLVER_H
 
 #include "SimulatedObject.h"
 
-class PBD {
+class Solver {
     double timeStep;
     int solverIterations = 10;
     SimulatedObject so;
-    public:
-    explicit PBD(Object& obj, double ground, double time_step) : timeStep(time_step) {
+public:
+    explicit Solver(Object& obj, double ground, double time_step) : timeStep(time_step) {
         so.initializeFromObject(obj, ground);
     };
     void resetSimulation(Object& obj, double ground);
@@ -25,8 +25,8 @@ class PBD {
     void setVolumeStiffness(const double volume_stiffness) { so.volumeStiffness = volume_stiffness; };
     void setShapeMatchingStiffness(const double shape_m_stiffness) { so.shapeMatchingStiffness = shape_m_stiffness; };
     void setOutsideForces(const Eigen::Vector3d& outside_forces) { so.outsideForces = outside_forces; };
+    void setAlgorithmType(const AlgorithmType algorithm_type) {so.algorithmType = algorithm_type; };
 };
 
 
-
-#endif //PBD_H
+#endif //SOLVER_H

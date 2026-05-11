@@ -6,6 +6,8 @@
 #define PARTICLE_H
 
 #include <Eigen/Eigen>
+#include <memory>
+#include <utility>
 
 struct Particle {
     Eigen::Vector3d x; // position
