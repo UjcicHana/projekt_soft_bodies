@@ -5,8 +5,7 @@
 #include "Solver.h"
 
 void Solver::step() const {
-    if (so.algorithmType == AlgorithmType::XPBD)
-    {
+    if (so.algorithmType == AlgorithmType::XPBD) {
         for (auto& c : so.constraints)
             c->lambda = 0.0;
     }
@@ -19,16 +18,18 @@ void Solver::step() const {
     for (int iter = 0; iter < solverIterations; ++iter) {
 
         for (auto& c : so.constraints)
-            c->project(so.algorithmType, 0.0);
+            c->project(so.algorithmType);
 
         for (auto& c : so.collisionConstraints)
-            c->project(so.algorithmType, 0.0);
+            c->project(so.algorithmType);
     }
 
     for (auto& p : so.particles) {
         p->v = (p->p - p->x) / timeStep;
         p->x = p->p;
     }
+
+    //for (auto& c : so.constraints) c->print();
 }
 
 void Solver::resetSimulation(Object& obj, double ground) {

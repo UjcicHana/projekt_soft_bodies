@@ -25,16 +25,23 @@ struct SimulationUI {
     float timeStep = 1.0f / 120.0f;
     int solverIterations = 10;
 
+    AlgorithmType algorithmType = AlgorithmType::XPBD;
+
+    // PBD attributes
     float distanceStiffness = 0.7f;
     float volumeStiffness = 0.2f;
     float shapeMatchingStiffness = 0.1f;
+
+    // XPBD atributes
+    float distanceCompliance = 5e-5f;
+    float volumeCompliance = 5e-6f;
 
     float gravityX = 0;
     float gravityY = -9.8f;
 } ui;
 
 void drawUI() {
-    ImGui::SetNextWindowSize(ImVec2(360, 310), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(360, 350), ImGuiCond_Once);
     ImGui::Begin("Simulation Controls");
 
     ImGui::PushItemWidth(160.0f);
@@ -46,12 +53,26 @@ void drawUI() {
 
     ImGui::SliderInt("Solver Iterations", &ui.solverIterations, 1, 50);
 
+    int mode = (ui.algorithmType == AlgorithmType::PBD) ? 0 : 1;
+
+    ImGui::Text("Algorithm");
+
+    ImGui::RadioButton("PBD", &mode, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("XPBD", &mode, 1);
+
+    ui.algorithmType = (mode == 0) ? AlgorithmType::PBD : AlgorithmType::XPBD;
+
     ImGui::Separator();
     ImGui::Text("Soft Body Parameters");
 
-    ImGui::SliderFloat("Distance Stiffness", &ui.distanceStiffness, 0.0f, 1.0f);
-
-    ImGui::SliderFloat("Volume Stiffness", &ui.volumeStiffness, 0.0f, 1.0f);
+    if (mode == 0) { // PBD
+        ImGui::SliderFloat("Distance Stiffness", &ui.distanceStiffness, 0.0f, 1.0f);
+        ImGui::SliderFloat("Volume Stiffness", &ui.volumeStiffness, 0.0f, 1.0f);
+    } else {
+        ImGui::SliderFloat("Distance Compliance", &ui.distanceCompliance, 0.0f, 1e-4f, "%.6f");
+        ImGui::SliderFloat("Volume Compliance", &ui.volumeCompliance, 0.0f, 1e-5f, "%.7f");
+    }
 
     ImGui::SliderFloat("Shape Matching Stiffness", &ui.shapeMatchingStiffness, 0.0f, 1.0f);
 
@@ -59,7 +80,6 @@ void drawUI() {
     ImGui::Text("Gravity");
 
     ImGui::SliderFloat("Gravity X", &ui.gravityX, -50.0f, 20.0f);
-
     ImGui::SliderFloat("Gravity Y", &ui.gravityY, -50.0f, 20.0f);
 
     if (ImGui::Button("Reset Gravity")) {
@@ -145,10 +165,10 @@ int main(int argc, char* argv[]) {
 
     float dt = 1.0f / 120.0f;
 
-    Solver pbd(obj, ground, dt);
+    Solver solver(obj, ground, dt);
     Renderer renderer = Renderer();
     renderer.initGrid(ground);
-    renderer.initMesh(pbd.getParticles(), obj.getFaces());
+    renderer.initMesh(solver.getParticles(), obj.getFaces());
 
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -174,26 +194,32 @@ int main(int argc, char* argv[]) {
 
         Eigen::Vector3d gravity = Eigen::Vector3d(ui.gravityX, ui.gravityY, 0);
 
-        pbd.setTimeStep(ui.timeStep);
-        pbd.setSolverIterations(ui.solverIterations);
-        pbd.setDistanceStiffness(ui.distanceStiffness);
-        pbd.setVolumeStiffness(ui.volumeStiffness);
-        pbd.setShapeMatchingStiffness(ui.shapeMatchingStiffness);
-        pbd.setOutsideForces(gravity);
+        solver.setTimeStep(ui.timeStep);
+        solver.setSolverIterations(ui.solverIterations);
+        solver.setAlgorithmType(ui.algorithmType);
+
+        solver.setDistanceStiffness(ui.distanceStiffness);
+        solver.setVolumeStiffness(ui.volumeStiffness);
+        solver.setShapeMatchingStiffness(ui.shapeMatchingStiffness);
+
+        solver.setDistanceCompliance(ui.distanceCompliance);
+        solver.setVolumeCompliance(ui.volumeCompliance);
+
+        solver.setOutsideForces(gravity);
 
         glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (ui.runSimulation) {
-            pbd.step();
+            solver.step();
         }
 
         if (ui.resetSimulation) {
-            pbd.resetSimulation(obj, ground);
+            solver.resetSimulation(obj, ground);
             ui.resetSimulation = false;
         }
 
-        renderer.updateMeshFromParticles(pbd.getParticles(), obj.getFaces());
+        renderer.updateMeshFromParticles(solver.getParticles(), obj.getFaces());
 
         Eigen::Affine3f view = Eigen::Affine3f::Identity();
         view.translate(Eigen::Vector3f(0, 0, -4));

@@ -19,13 +19,18 @@ public:
     void step() const;
 
     [[nodiscard]] std::vector<std::shared_ptr<Particle>> getParticles() const { return so.particles; };
-    void setTimeStep(const double time_step) { timeStep = time_step; };
+    void setTimeStep(const double time_step) { timeStep = time_step; so.timeStep = time_step; };
     void setSolverIterations(const int solver_iterations) { solverIterations = solver_iterations; };
+    void setAlgorithmType(const AlgorithmType algorithm_type) { so.algorithmType = algorithm_type; };
+
     void setDistanceStiffness(const double dist_stiffness) { so.distanceStiffness = dist_stiffness; };
     void setVolumeStiffness(const double volume_stiffness) { so.volumeStiffness = volume_stiffness; };
     void setShapeMatchingStiffness(const double shape_m_stiffness) { so.shapeMatchingStiffness = shape_m_stiffness; };
+
+    void setDistanceCompliance (const double distance_compliance) { so.distanceCompliance = distance_compliance; };
+    void setVolumeCompliance (const double volume_compliance) { so.volumeCompliance = volume_compliance; };
+
     void setOutsideForces(const Eigen::Vector3d& outside_forces) { so.outsideForces = outside_forces; };
-    void setAlgorithmType(const AlgorithmType algorithm_type) {so.algorithmType = algorithm_type; };
 };
 
 

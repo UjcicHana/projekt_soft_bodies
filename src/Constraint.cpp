@@ -9,7 +9,7 @@
 Constraint::~Constraint() = default;
 
 
-void DistanceConstraint::project(AlgorithmType algorithmType, double dt) {
+void DistanceConstraint::project(AlgorithmType algorithmType) {
     Eigen::Vector3d dir = p1->p - p2->p;
     double len = dir.norm();
 
@@ -23,25 +23,31 @@ void DistanceConstraint::project(AlgorithmType algorithmType, double dt) {
     double wSum = w1 + w2;
 
     if (wSum == 0.0) return;
-    Eigen::Vector3d deltaX;
+    Eigen::Vector3d correction;
 
     switch (algorithmType) {
         case AlgorithmType::PBD:
-            deltaX = stiffness * (C / wSum) * n;
+            correction = stiffness * (C / wSum) * n;
+
+            p1->p -= w1 * correction;
+            p2->p += w2 * correction;
+
             break;
         case AlgorithmType::XPBD:
+            //std::cout << "compliance: " << compliance << " dt: " << dt << "\n";
             double alphaTilde = compliance / (dt * dt);
-
-            double deltaLambda = (-C - alphaTilde * lambda) / (wSum + alphaTilde);
+            // std::cout << "C: " << C << " alphaTilde: " << alphaTilde << " lambda: " << lambda << " wSum: " << wSum << "\n";
+            double denom = wSum + alphaTilde;
+            if (std::abs(denom) < 1e-9)
+                break;
+            double deltaLambda = (-C - alphaTilde * lambda) / denom;
 
             lambda += deltaLambda;
 
-            deltaX =  deltaLambda * n;
+            p1->p += w1 * deltaLambda * n;
+            p2->p -= w2 * deltaLambda * n;
             break;
     }
-
-    p1->p -= w1 * deltaX;
-    p2->p += w2 * deltaX;
 }
 
 void DistanceConstraint::print() const
@@ -51,10 +57,13 @@ void DistanceConstraint::print() const
               << ", p2 = " << p2->x.transpose()
               << ", restLength = " << restLength
               << ", stiffness = " << stiffness
+              << ", compliance = " << compliance
+              << ", lambda = " << lambda
+              << ", deltaTime = " << dt
               << "\n";
 }
 
-void CollisionConstraint::project(AlgorithmType algorithmType, double dt) {
+void CollisionConstraint::project(AlgorithmType algorithmType) {
 
     double penetration = normal.dot(p->p) - offset;
 
@@ -75,7 +84,7 @@ void CollisionConstraint::print() const
               << "\n";
 }
 
-void ShapeMatchingConstraint::project(AlgorithmType algorithmType, double dt) {
+void ShapeMatchingConstraint::project(AlgorithmType algorithmType) {
     if (particles.empty()) return;
 
     Eigen::Vector3d cm = Eigen::Vector3d::Zero();
@@ -124,7 +133,7 @@ double VolumeConstraint::computeVolume() const
     return volume / 6.0;
 }
 
-void VolumeConstraint::project(AlgorithmType algorithmType, double dt)
+void VolumeConstraint::project(AlgorithmType algorithmType)
 {
     double currentVolume = computeVolume();
     double C = currentVolume - restVolume;
@@ -190,10 +199,11 @@ void VolumeConstraint::project(AlgorithmType algorithmType, double dt)
 
 void VolumeConstraint::print() const
 {
-    std::cout << "VolumeConstraint | restVolume = "
-              << restVolume
-              << ", stiffness = "
-              << stiffness
+    std::cout << "VolumeConstraint | restVolume = " << restVolume
+    << ", stiffness = " << stiffness
+    << ", compliance = " << compliance
+    << ", lambda = " << lambda
+    << ", deltaTime = " << dt
               << "\n";
 }
 

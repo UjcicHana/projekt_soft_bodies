@@ -18,13 +18,15 @@ public:
     std::vector<std::shared_ptr<Constraint>> constraints;
     std::vector<std::shared_ptr<CollisionConstraint>> collisionConstraints;
 
+    double timeStep = 1.0 / 120.0;
     AlgorithmType algorithmType;
     double distanceStiffness = 0.7;
     double volumeStiffness = 0.2;
     std::vector<Eigen::Vector3d> restPositions;
     double shapeMatchingStiffness = 0.1;
     Eigen::Vector3d outsideForces = Eigen::Vector3d(0, -9.8, 0); // default just gravity
-    double distanceCompliance;
+    double distanceCompliance = 5e-5;
+    double volumeCompliance = 5e-6;
 
     void initializeFromObject(
         const Object& obj,
@@ -35,11 +37,11 @@ public:
         AlgorithmType at = AlgorithmType::PBD);
 
     // build constraints
-    void generateDistanceConstraints(double stiffness);
+    void generateDistanceConstraints(double stiffness, double compliance, double dt);
     void generateCollisionConstraints(double ground);
 
     // utils
-    void calculateForces(const Eigen::Vector3d& outsideForces) const;
+    void calculateForces(const Eigen::Vector3d& outside_forces) const;
 
 };
 

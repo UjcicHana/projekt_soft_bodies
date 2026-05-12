@@ -60,21 +60,19 @@ void SimulatedObject::initializeFromObject(
 
     constraints.clear();
 
-    generateDistanceConstraints(distanceStiffness);
+    generateDistanceConstraints(distanceStiffness, distanceCompliance, timeStep);
     generateCollisionConstraints(ground);
     constraints.push_back(std::make_shared<VolumeConstraint>(
-    particles,
-    faces,
-    volumeStiffness));
+    particles, faces, volumeStiffness, volumeCompliance, timeStep));
     constraints.push_back(std::make_shared<ShapeMatchingConstraint>(
-    particles,
-    restPositions,
-    shapeMatchingStiffness));
+    particles, restPositions, shapeMatchingStiffness));
+
+    //for (const auto &c : constraints) c->print();
 
     calculateForces(outsideForces);
 }
 
-void SimulatedObject::generateDistanceConstraints(double stiffness) {
+void SimulatedObject::generateDistanceConstraints(double stiffness, double compliance, double dt) {
 
     std::set<std::pair<int,int>> edges;
 
@@ -92,11 +90,8 @@ void SimulatedObject::generateDistanceConstraints(double stiffness) {
     for (auto& e : edges) {
         constraints.push_back(
             std::make_shared<DistanceConstraint>(
-                particles[e.first],
-                particles[e.second],
-                stiffness
-            )
-        );
+                particles[e.first], particles[e.second],
+                stiffness, compliance, dt));
     }
 }
 
@@ -114,10 +109,10 @@ void SimulatedObject::generateCollisionConstraints(double ground) {
     }
 }
 
-void SimulatedObject::calculateForces(const Eigen::Vector3d& outsideForces) const {
+void SimulatedObject::calculateForces(const Eigen::Vector3d& outside_forces) const {
 
     for (const auto& particle : particles)
     {
-        particle->F = particle->m * outsideForces;
+        particle->F = particle->m * outside_forces;
     }
 }
