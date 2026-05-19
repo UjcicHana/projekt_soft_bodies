@@ -41,6 +41,8 @@ void Constraint::solve(AlgorithmType algorithmType) {
             continue;
         }
         particles[i]->p += (deltaLambda * particles[i]->w) * gradient.col(i);
+        //auto added = (deltaLambda * particles[i]->w) * gradient.col(i);
+        //std::cout << "Solve = " << added.transpose() << std::endl;
     }
 
     lambda += deltaLambda;
@@ -61,7 +63,7 @@ bool Constraint::isSatisfied() {
 
 void DistanceConstraint::project(AlgorithmType algorithmType) {
     solve(algorithmType);
-    /*auto& p0 = particles[0];
+    /* auto& p0 = particles[0];
     auto& p1 = particles[1];
 
     Eigen::Vector3d dir = p0->p - p1->p;
@@ -271,7 +273,8 @@ double VolumeConstraint::computeVolume() const
 
 void VolumeConstraint::project(AlgorithmType algorithmType)
 {
-    double currentVolume = computeVolume();
+    solve(algorithmType);
+    /*double currentVolume = computeVolume();
     double C = currentVolume - restVolume;
 
     if (std::abs(C) < 1e-6)
@@ -327,9 +330,12 @@ void VolumeConstraint::project(AlgorithmType algorithmType)
 
             for (size_t i = 0; i < particles.size(); ++i) {
                 particles[i]->p += particles[i]->w * deltaLambda * gradients[i];
+                auto added = particles[i]->w * deltaLambda * gradients[i];
+                std::cout << "Project: " << added.transpose() << std::endl;
+
             }
             break;
-    }
+    }*/
 
 }
 
@@ -344,11 +350,40 @@ void VolumeConstraint::print() const
 }
 
 float VolumeConstraint::calculateValue() {
-    return 0;
+
+    double currentVolume = 0.0;
+
+    for (const auto& f : faces) {
+        const Eigen::Vector3d& x0 = particles[f.x()]->p;
+        const Eigen::Vector3d& x1 = particles[f.y()]->p;
+        const Eigen::Vector3d& x2 = particles[f.z()]->p;
+
+        currentVolume += x0.dot(x1.cross(x2));
+    }
+
+    return static_cast<float>(currentVolume / 6.0 - restVolume);
+
 }
 
 void VolumeConstraint::calculateGradient() {
+    gradient = Eigen::MatrixXd::Zero(3, particles.size());
+    for (const auto& f : faces) {
+        int i0 = f.x();
+        int i1 = f.y();
+        int i2 = f.z();
 
+        const Eigen::Vector3d& p0 = particles[i0]->p;
+        const Eigen::Vector3d& p1 = particles[i1]->p;
+        const Eigen::Vector3d& p2 = particles[i2]->p;
+
+        Eigen::Vector3d g0 = (p1.cross(p2)) / 6.0;
+        Eigen::Vector3d g1 = (p2.cross(p0)) / 6.0;
+        Eigen::Vector3d g2 = (p0.cross(p1)) / 6.0;
+
+        gradient.col(i0) += g0;
+        gradient.col(i1) += g1;
+        gradient.col(i2) += g2;
+    }
 }
 
 void FixedPointConstraint::project(
