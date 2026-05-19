@@ -66,6 +66,7 @@ void SimulatedObject::initializeFromObject(
     particles, faces, volumeStiffness, volumeCompliance, timeStep));
     constraints.push_back(std::make_shared<ShapeMatchingConstraint>(
     particles, restPositions, shapeMatchingStiffness));
+    //constraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], restPositions[0])));
 
     //for (const auto &c : constraints) c->print();
 

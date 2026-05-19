@@ -8,9 +8,63 @@
 
 Constraint::~Constraint() = default;
 
+void Constraint::solve(AlgorithmType algorithmType) {
+    // If the constraint is already satisfied, no need to solve it
+    if (isSatisfied()) return;
+
+    calculateGradient();
+    float C = calculateValue();
+
+    // compute delta lambda
+    float alphaTilde = compliance / (dt * dt);
+    float numerator = -C - alphaTilde * lambda;
+    float denominator = alphaTilde;
+
+    for (unsigned int i = 0; i < particles.size(); i++) {
+        denominator += particles[i]->w * gradient.col(i).dot(gradient.col(i));
+    }
+
+    float deltaLambda = 0.0;
+    if (denominator < 1e-6) {
+        deltaLambda = 0.0;
+    } else {
+        deltaLambda = numerator / denominator;
+    }
+
+    if(std::isnan(deltaLambda)) {
+        std::cout << "deltaLambda is NAN" << std::endl;
+        deltaLambda = 0.0;
+    }
+
+    for (unsigned int i = 0; i < particles.size(); i++) {
+        if(denominator < 1e-6) {
+            continue;
+        }
+        particles[i]->p += (deltaLambda * particles[i]->w) * gradient.col(i);
+    }
+
+    lambda += deltaLambda;
+}
+
+bool Constraint::isSatisfied() {
+    switch (constraintType) {
+        case INEQUALITY:
+            // >= 0
+            return calculateValue() >= 0;
+        case EQUALITY:
+            // == 0
+            return fabsf(calculateValue()) <= 1e-6;
+    }
+
+    throw std::runtime_error("Constraint type not handled");
+}
 
 void DistanceConstraint::project(AlgorithmType algorithmType) {
-    Eigen::Vector3d dir = p1->p - p2->p;
+    solve(algorithmType);
+    /*auto& p0 = particles[0];
+    auto& p1 = particles[1];
+
+    Eigen::Vector3d dir = p0->p - p1->p;
     double len = dir.norm();
 
     if (len < 1e-8) return;
@@ -18,8 +72,8 @@ void DistanceConstraint::project(AlgorithmType algorithmType) {
     Eigen::Vector3d n = dir / len;
     double C = len - restLength;
 
-    double w1 = p1->w;
-    double w2 = p2->w;
+    double w1 = p0->w;
+    double w2 = p1->w;
     double wSum = w1 + w2;
 
     if (wSum == 0.0) return;
@@ -29,8 +83,8 @@ void DistanceConstraint::project(AlgorithmType algorithmType) {
         case AlgorithmType::PBD:
             correction = stiffness * (C / wSum) * n;
 
-            p1->p -= w1 * correction;
-            p2->p += w2 * correction;
+            p0->p -= w1 * correction;
+            p1->p += w2 * correction;
 
             break;
         case AlgorithmType::XPBD:
@@ -44,17 +98,17 @@ void DistanceConstraint::project(AlgorithmType algorithmType) {
 
             lambda += deltaLambda;
 
-            p1->p += w1 * deltaLambda * n;
-            p2->p -= w2 * deltaLambda * n;
+            p0->p += w1 * deltaLambda * n;
+            p1->p -= w2 * deltaLambda * n;
             break;
-    }
+    }*/
 }
 
 void DistanceConstraint::print() const
 {
     std::cout << "DistanceConstraint: "
-              << "p1 = " << p1->x.transpose()
-              << ", p2 = " << p2->x.transpose()
+              << "p1 = " << particles[0]->x.transpose()
+              << ", p2 = " << particles[1]->x.transpose()
               << ", restLength = " << restLength
               << ", stiffness = " << stiffness
               << ", compliance = " << compliance
@@ -63,15 +117,29 @@ void DistanceConstraint::print() const
               << "\n";
 }
 
+float DistanceConstraint::calculateValue() {
+    auto& p0 = particles[0];
+    auto& p1 = particles[1];
+    return static_cast<float>((p0->p - p1->p).norm() - restLength);
+}
+
+void DistanceConstraint::calculateGradient() {
+    auto g1 = (particles[0]->p - particles[1]->p).normalized();
+    auto g2 = -g1;
+
+    gradient.col(0) = g1;
+    gradient.col(1) = g2;
+}
+
 void CollisionConstraint::project(AlgorithmType algorithmType) {
 
-    double penetration = normal.dot(p->p) - offset;
+    double penetration = normal.dot(particles[0]->p) - offset;
 
     if (penetration >= 0.0)
         return;
 
     // Push particle out of the plane
-    p->p -= penetration * normal;
+    particles[0]->p -= penetration * normal;
 }
 
 
@@ -82,6 +150,66 @@ void CollisionConstraint::print() const
               << ", normal = " << normal.transpose()
               << ", offset = " << offset
               << "\n";
+}
+
+float CollisionConstraint::calculateValue() {
+    /*auto oldQ = particles[0]->x;
+    auto q = particles[0]->p;
+    auto p1 = particles[1]->p;
+    auto p2 = particles[2]->p;
+    auto p3 = particles[3]->p;
+
+    auto n = (p2 -p1).cross(p3 -p1);
+    // if triangle is degenerate, normalization would result in NaN values
+    if (n.norm() < 1e-3f) {
+        return 0.0f;
+    }
+    n.normalize();
+
+    return static_cast<float>((q - p1).dot(n) - h);*/
+    return 0;
+}
+
+void CollisionConstraint::calculateGradient() {
+    /*auto q = particles[0]->p;
+    auto p1 = particles[1]->p;
+    auto p2 = particles[2]->p;
+    auto p3 = particles[3]->p;
+
+    auto e1 = p2 - p1;
+    auto e2 = p3 - p1;
+
+    auto n = e1.cross(e2);
+
+    double area2 = n.norm();
+
+    if (area2 < 1e-6f) {
+        gradient = Eigen::Matrix3Xd::Zero(3, 4);
+        return;
+    }
+
+    n.normalize();
+
+    // Compute barycentric coordinates of projected point
+    auto qp = q - p1;
+
+    auto d00 = e1.dot(e1);
+    auto d01 = e1.dot(e2);
+    auto d11 = e2.dot(e2);
+    auto d20 = qp.dot(e1);
+    auto d21 = qp.dot(e2);
+
+    auto denom = d00 * d11 - d01 * d01;
+
+    auto v = (d11 * d20 - d01 * d21) / denom;
+    auto w = (d00 * d21 - d01 * d20) / denom;
+    auto u = 1.0f - v - w;
+
+    // Gradients
+    gradient.col(0) = n;          // point q
+    gradient.col(1) = -u * n;     // p1
+    gradient.col(2) = -v * n;     // p2
+    gradient.col(3) = -w * n;     // p3*/
 }
 
 void ShapeMatchingConstraint::project(AlgorithmType algorithmType) {
@@ -117,6 +245,14 @@ void ShapeMatchingConstraint::print() const {
                   << " particles, stiffness = "
                   << stiffness << "\n";
     }
+
+float ShapeMatchingConstraint::calculateValue() {
+    return 0;
+}
+
+void ShapeMatchingConstraint::calculateGradient() {
+
+}
 
 double VolumeConstraint::computeVolume() const
 {
@@ -205,6 +341,37 @@ void VolumeConstraint::print() const
     << ", lambda = " << lambda
     << ", deltaTime = " << dt
               << "\n";
+}
+
+float VolumeConstraint::calculateValue() {
+    return 0;
+}
+
+void VolumeConstraint::calculateGradient() {
+
+}
+
+void FixedPointConstraint::project(
+    AlgorithmType algorithmType
+)
+{
+    particles[0]->p = fixedPoint;
+}
+
+void FixedPointConstraint::print() const
+{
+    std::cout
+        << "FixedPointConstraint | fixedPosition = "
+        << fixedPoint.transpose()
+        << "\n";
+}
+
+float FixedPointConstraint::calculateValue() {
+    return 0;
+}
+
+void FixedPointConstraint::calculateGradient() {
+
 }
 
 

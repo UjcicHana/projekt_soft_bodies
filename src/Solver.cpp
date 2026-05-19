@@ -17,8 +17,9 @@ void Solver::step() const {
 
     for (int iter = 0; iter < solverIterations; ++iter) {
 
-        for (auto& c : so.constraints)
+        for (auto& c : so.constraints) {
             c->project(so.algorithmType);
+        }
 
         for (auto& c : so.collisionConstraints)
             c->project(so.algorithmType);
