@@ -9,43 +9,61 @@
 Constraint::~Constraint() = default;
 
 void Constraint::solve(AlgorithmType algorithmType) {
+
     // If the constraint is already satisfied, no need to solve it
     if (isSatisfied()) return;
 
     calculateGradient();
     float C = calculateValue();
 
-    // compute delta lambda
-    float alphaTilde = compliance / (dt * dt);
-    float numerator = -C - alphaTilde * lambda;
-    float denominator = alphaTilde;
+    if (algorithmType == AlgorithmType::PBD) {
+        float denominator = 0.0f;
 
-    for (unsigned int i = 0; i < particles.size(); i++) {
-        denominator += particles[i]->w * gradient.col(i).dot(gradient.col(i));
-    }
-
-    float deltaLambda = 0.0;
-    if (denominator < 1e-6) {
-        deltaLambda = 0.0;
-    } else {
-        deltaLambda = numerator / denominator;
-    }
-
-    if(std::isnan(deltaLambda)) {
-        std::cout << "deltaLambda is NAN" << std::endl;
-        deltaLambda = 0.0;
-    }
-
-    for (unsigned int i = 0; i < particles.size(); i++) {
-        if(denominator < 1e-6) {
-            continue;
+        for (unsigned int i = 0; i < particles.size(); i++) {
+            denominator += particles[i]->w * gradient.col(i).dot(gradient.col(i));
         }
-        particles[i]->p += (deltaLambda * particles[i]->w) * gradient.col(i);
-        //auto added = (deltaLambda * particles[i]->w) * gradient.col(i);
-        //std::cout << "Solve = " << added.transpose() << std::endl;
-    }
+        if(denominator > 1e-6) {
+            lambda = - stiffness * (C / denominator);
+        }
 
-    lambda += deltaLambda;
+        for (unsigned int i = 0; i < particles.size(); i++) {
+            particles[i]->p += (lambda * particles[i]->w) * gradient.col(i);
+            //auto added = (lambda * particles[i]->w) * gradient.col(i);
+            //std::cout << "Solve = " << added.transpose() << std::endl;
+        }
+    } else if (algorithmType == AlgorithmType::XPBD) {
+        // compute delta lambda
+        float alphaTilde = compliance / (dt * dt);
+        float numerator = -C - alphaTilde * lambda;
+        float denominator = alphaTilde;
+
+        for (unsigned int i = 0; i < particles.size(); i++) {
+            denominator += particles[i]->w * gradient.col(i).dot(gradient.col(i));
+        }
+
+        float deltaLambda = 0.0;
+        if (denominator < 1e-6) {
+            deltaLambda = 0.0;
+        } else {
+            deltaLambda = numerator / denominator;
+        }
+
+        if(std::isnan(deltaLambda)) {
+            std::cout << "deltaLambda is NAN" << std::endl;
+            deltaLambda = 0.0;
+        }
+
+        for (unsigned int i = 0; i < particles.size(); i++) {
+            if(denominator < 1e-6) {
+                continue;
+            }
+            particles[i]->p += (deltaLambda * particles[i]->w) * gradient.col(i);
+            //auto added = (deltaLambda * particles[i]->w) * gradient.col(i);
+            //std::cout << "Solve = " << added.transpose() << std::endl;
+        }
+
+        lambda += deltaLambda;
+    }
 }
 
 bool Constraint::isSatisfied() {
@@ -63,45 +81,47 @@ bool Constraint::isSatisfied() {
 
 void DistanceConstraint::project(AlgorithmType algorithmType) {
     solve(algorithmType);
-    /* auto& p0 = particles[0];
+    /*auto& p0 = particles[0];
     auto& p1 = particles[1];
 
-    Eigen::Vector3d dir = p0->p - p1->p;
-    double len = dir.norm();
+    Eigen::Vector3f dir = p0->p - p1->p;
+    float len = dir.norm();
 
     if (len < 1e-8) return;
 
-    Eigen::Vector3d n = dir / len;
-    double C = len - restLength;
+    Eigen::Vector3f n = dir / len;
+    float C = len - restLength;
 
-    double w1 = p0->w;
-    double w2 = p1->w;
-    double wSum = w1 + w2;
+    float w1 = p0->w;
+    float w2 = p1->w;
+    float wSum = w1 + w2;
 
     if (wSum == 0.0) return;
-    Eigen::Vector3d correction;
+    Eigen::Vector3f correction;
 
     switch (algorithmType) {
         case AlgorithmType::PBD:
             correction = stiffness * (C / wSum) * n;
 
-            p0->p -= w1 * correction;
+            p0->p += -(w1 * correction);
+            std::cout << "Project dist = " << (-(w1 * correction)).transpose() << std::endl;
             p1->p += w2 * correction;
+            std::cout << "Project dist = " << (w2 * correction).transpose() << std::endl;
 
             break;
         case AlgorithmType::XPBD:
             //std::cout << "compliance: " << compliance << " dt: " << dt << "\n";
-            double alphaTilde = compliance / (dt * dt);
+            float alphaTilde = compliance / (dt * dt);
             // std::cout << "C: " << C << " alphaTilde: " << alphaTilde << " lambda: " << lambda << " wSum: " << wSum << "\n";
-            double denom = wSum + alphaTilde;
+            float denom = wSum + alphaTilde;
             if (std::abs(denom) < 1e-9)
                 break;
-            double deltaLambda = (-C - alphaTilde * lambda) / denom;
+            float deltaLambda = (-C - alphaTilde * lambda) / denom;
 
             lambda += deltaLambda;
 
             p0->p += w1 * deltaLambda * n;
-            p1->p -= w2 * deltaLambda * n;
+            p1->p += -(w2 * deltaLambda * n);
             break;
     }*/
 }
@@ -122,7 +142,7 @@ void DistanceConstraint::print() const
 float DistanceConstraint::calculateValue() {
     auto& p0 = particles[0];
     auto& p1 = particles[1];
-    return static_cast<float>((p0->p - p1->p).norm() - restLength);
+    return (p0->p - p1->p).norm() - restLength;
 }
 
 void DistanceConstraint::calculateGradient() {
@@ -135,7 +155,7 @@ void DistanceConstraint::calculateGradient() {
 
 void CollisionConstraint::project(AlgorithmType algorithmType) {
 
-    double penetration = normal.dot(particles[0]->p) - offset;
+    float penetration = normal.dot(particles[0]->p) - offset;
 
     if (penetration >= 0.0)
         return;
@@ -183,7 +203,7 @@ void CollisionConstraint::calculateGradient() {
 
     auto n = e1.cross(e2);
 
-    double area2 = n.norm();
+    float area2 = n.norm();
 
     if (area2 < 1e-6f) {
         gradient = Eigen::Matrix3Xd::Zero(3, 4);
@@ -217,24 +237,24 @@ void CollisionConstraint::calculateGradient() {
 void ShapeMatchingConstraint::project(AlgorithmType algorithmType) {
     if (particles.empty()) return;
 
-    Eigen::Vector3d cm = Eigen::Vector3d::Zero();
+    Eigen::Vector3f cm = Eigen::Vector3f::Zero();
     for (const auto& p : particles)
         cm += p->p;
     cm = cm / particles.size();
 
-    Eigen::Vector3d cmRest = Eigen::Vector3d::Zero();
+    Eigen::Vector3f cmRest = Eigen::Vector3f::Zero();
     for (const auto& r : restPositions)
         cmRest += r;
     cmRest = cmRest / restPositions.size();
 
-    double alpha = 1.0;
+    float alpha = 1.0;
 
     if (algorithmType == AlgorithmType::XPBD) {
         alpha = 1.0 / (1.0 + compliance / (dt * dt));
     }
 
     for (size_t i = 0; i < particles.size(); ++i) {
-        Eigen::Vector3d goal =
+        Eigen::Vector3f goal =
             cm + (restPositions[i] - cmRest);
 
         particles[i]->p += alpha * stiffness * (goal - particles[i]->p);
@@ -256,14 +276,14 @@ void ShapeMatchingConstraint::calculateGradient() {
 
 }
 
-double VolumeConstraint::computeVolume() const
+float VolumeConstraint::computeVolume() const
 {
-    double volume = 0.0;
+    float volume = 0.0;
 
     for (const auto& f : faces) {
-        const Eigen::Vector3d& x0 = particles[f.x()]->p;
-        const Eigen::Vector3d& x1 = particles[f.y()]->p;
-        const Eigen::Vector3d& x2 = particles[f.z()]->p;
+        const Eigen::Vector3f& x0 = particles[f.x()]->p;
+        const Eigen::Vector3f& x1 = particles[f.y()]->p;
+        const Eigen::Vector3f& x2 = particles[f.z()]->p;
 
         volume += x0.dot(x1.cross(x2));
     }
@@ -274,34 +294,34 @@ double VolumeConstraint::computeVolume() const
 void VolumeConstraint::project(AlgorithmType algorithmType)
 {
     solve(algorithmType);
-    /*double currentVolume = computeVolume();
-    double C = currentVolume - restVolume;
+    /*float currentVolume = computeVolume();
+    float C = currentVolume - restVolume;
 
     if (std::abs(C) < 1e-6)
         return;
 
-    std::vector<Eigen::Vector3d> gradients(particles.size(),
-                                           Eigen::Vector3d::Zero());
+    std::vector<Eigen::Vector3f> gradients(particles.size(),
+                                           Eigen::Vector3f::Zero());
 
     for (const auto& f : faces) {
         int i0 = f.x();
         int i1 = f.y();
         int i2 = f.z();
 
-        const Eigen::Vector3d& p0 = particles[i0]->p;
-        const Eigen::Vector3d& p1 = particles[i1]->p;
-        const Eigen::Vector3d& p2 = particles[i2]->p;
+        const Eigen::Vector3f& p0 = particles[i0]->p;
+        const Eigen::Vector3f& p1 = particles[i1]->p;
+        const Eigen::Vector3f& p2 = particles[i2]->p;
 
-        Eigen::Vector3d g0 = (p1.cross(p2)) / 6.0;
-        Eigen::Vector3d g1 = (p2.cross(p0)) / 6.0;
-        Eigen::Vector3d g2 = (p0.cross(p1)) / 6.0;
+        Eigen::Vector3f g0 = (p1.cross(p2)) / 6.0;
+        Eigen::Vector3f g1 = (p2.cross(p0)) / 6.0;
+        Eigen::Vector3f g2 = (p0.cross(p1)) / 6.0;
 
         gradients[i0] += g0;
         gradients[i1] += g1;
         gradients[i2] += g2;
     }
 
-    double denom = 0.0;
+    float denom = 0.0;
     for (size_t i = 0; i < particles.size(); ++i) {
         denom += particles[i]->w * gradients[i].squaredNorm();
     }
@@ -309,18 +329,21 @@ void VolumeConstraint::project(AlgorithmType algorithmType)
     if (denom < 1e-9)
         return;
 
-    double deltaLambda;
+    float deltaLambda;
     switch (algorithmType) {
         case AlgorithmType::PBD:
             deltaLambda = -C / denom;
 
             for (size_t i = 0; i < particles.size(); ++i) {
                 particles[i]->p += stiffness * particles[i]->w * deltaLambda * gradients[i];
+                auto added = stiffness * particles[i]->w * deltaLambda * gradients[i];
+                std::cout << "Project volume: " << added.transpose() << std::endl;
+
             }
 
             break;
         case AlgorithmType::XPBD:
-            double alphaTilde =
+            float alphaTilde =
             compliance / (dt * dt);
 
             deltaLambda = (-C - alphaTilde * lambda)
@@ -331,7 +354,7 @@ void VolumeConstraint::project(AlgorithmType algorithmType)
             for (size_t i = 0; i < particles.size(); ++i) {
                 particles[i]->p += particles[i]->w * deltaLambda * gradients[i];
                 auto added = particles[i]->w * deltaLambda * gradients[i];
-                std::cout << "Project: " << added.transpose() << std::endl;
+                std::cout << "Project volume: " << added.transpose() << std::endl;
 
             }
             break;
@@ -351,34 +374,34 @@ void VolumeConstraint::print() const
 
 float VolumeConstraint::calculateValue() {
 
-    double currentVolume = 0.0;
+    float currentVolume = 0.0;
 
     for (const auto& f : faces) {
-        const Eigen::Vector3d& x0 = particles[f.x()]->p;
-        const Eigen::Vector3d& x1 = particles[f.y()]->p;
-        const Eigen::Vector3d& x2 = particles[f.z()]->p;
+        const Eigen::Vector3f& x0 = particles[f.x()]->p;
+        const Eigen::Vector3f& x1 = particles[f.y()]->p;
+        const Eigen::Vector3f& x2 = particles[f.z()]->p;
 
         currentVolume += x0.dot(x1.cross(x2));
     }
 
-    return static_cast<float>(currentVolume / 6.0 - restVolume);
+    return currentVolume / 6.0f - restVolume;
 
 }
 
 void VolumeConstraint::calculateGradient() {
-    gradient = Eigen::MatrixXd::Zero(3, particles.size());
+    gradient = Eigen::MatrixXf::Zero(3, particles.size());
     for (const auto& f : faces) {
         int i0 = f.x();
         int i1 = f.y();
         int i2 = f.z();
 
-        const Eigen::Vector3d& p0 = particles[i0]->p;
-        const Eigen::Vector3d& p1 = particles[i1]->p;
-        const Eigen::Vector3d& p2 = particles[i2]->p;
+        const Eigen::Vector3f& p0 = particles[i0]->p;
+        const Eigen::Vector3f& p1 = particles[i1]->p;
+        const Eigen::Vector3f& p2 = particles[i2]->p;
 
-        Eigen::Vector3d g0 = (p1.cross(p2)) / 6.0;
-        Eigen::Vector3d g1 = (p2.cross(p0)) / 6.0;
-        Eigen::Vector3d g2 = (p0.cross(p1)) / 6.0;
+        Eigen::Vector3f g0 = (p1.cross(p2)) / 6.0;
+        Eigen::Vector3f g1 = (p2.cross(p0)) / 6.0;
+        Eigen::Vector3f g2 = (p0.cross(p1)) / 6.0;
 
         gradient.col(i0) += g0;
         gradient.col(i1) += g1;
@@ -386,11 +409,8 @@ void VolumeConstraint::calculateGradient() {
     }
 }
 
-void FixedPointConstraint::project(
-    AlgorithmType algorithmType
-)
-{
-    particles[0]->p = fixedPoint;
+void FixedPointConstraint::project(AlgorithmType algorithmType) {
+    solve(algorithmType);
 }
 
 void FixedPointConstraint::print() const
@@ -402,11 +422,11 @@ void FixedPointConstraint::print() const
 }
 
 float FixedPointConstraint::calculateValue() {
-    return 0;
+    return static_cast<float>((particles[0]->p - fixedPoint).norm());
 }
 
 void FixedPointConstraint::calculateGradient() {
-
+    gradient.col(0) = (particles[0]->p - fixedPoint).normalized();
 }
 
 

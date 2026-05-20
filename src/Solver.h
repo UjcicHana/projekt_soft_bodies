@@ -8,29 +8,29 @@
 #include "SimulatedObject.h"
 
 class Solver {
-    double timeStep;
+    float timeStep;
     int solverIterations = 10;
     SimulatedObject so;
 public:
-    explicit Solver(Object& obj, double ground, double time_step) : timeStep(time_step) {
+    explicit Solver(Object& obj, float ground, float time_step) : timeStep(time_step) {
         so.initializeFromObject(obj, ground);
     };
-    void resetSimulation(Object& obj, double ground);
-    void step() const;
+    void resetSimulation(Object& obj, float ground);
+    void step();
 
     [[nodiscard]] std::vector<std::shared_ptr<Particle>> getParticles() const { return so.particles; };
-    void setTimeStep(const double time_step) { timeStep = time_step; so.timeStep = time_step; };
+    void setTimeStep(const float time_step) { timeStep = time_step; so.timeStep = time_step; };
     void setSolverIterations(const int solver_iterations) { solverIterations = solver_iterations; };
     void setAlgorithmType(const AlgorithmType algorithm_type) { so.algorithmType = algorithm_type; };
 
-    void setDistanceStiffness(const double dist_stiffness) { so.distanceStiffness = dist_stiffness; };
-    void setVolumeStiffness(const double volume_stiffness) { so.volumeStiffness = volume_stiffness; };
-    void setShapeMatchingStiffness(const double shape_m_stiffness) { so.shapeMatchingStiffness = shape_m_stiffness; };
+    void setDistanceStiffness(const float dist_stiffness) { so.distanceStiffness = dist_stiffness; };
+    void setVolumeStiffness(const float volume_stiffness) { so.volumeStiffness = volume_stiffness; };
+    void setShapeMatchingStiffness(const float shape_m_stiffness) { so.shapeMatchingStiffness = shape_m_stiffness; };
 
-    void setDistanceCompliance (const double distance_compliance) { so.distanceCompliance = distance_compliance; };
-    void setVolumeCompliance (const double volume_compliance) { so.volumeCompliance = volume_compliance; };
+    void setDistanceCompliance (const float distance_compliance) { so.distanceCompliance = distance_compliance; };
+    void setVolumeCompliance (const float volume_compliance) { so.volumeCompliance = volume_compliance; };
 
-    void setOutsideForces(const Eigen::Vector3d& outside_forces) { so.outsideForces = outside_forces; };
+    void setOutsideForces(const Eigen::Vector3f& outside_forces) { so.outsideForces = outside_forces; };
 };
 
 

@@ -9,10 +9,10 @@
 #include "Constraint.h"
 
 class Object { // normalized and centered
-    std::vector<Eigen::Vector3d> vertices;
+    std::vector<Eigen::Vector3f> vertices;
     std::vector<Eigen::Vector3i> faces;
 public:
-    [[nodiscard]] std::vector<Eigen::Vector3d> getVertices() const {
+    [[nodiscard]] std::vector<Eigen::Vector3f> getVertices() const {
         return vertices;
     }
     [[nodiscard]] std::vector<Eigen::Vector3i> getFaces() const {

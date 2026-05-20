@@ -4,10 +4,9 @@
 
 #include "Solver.h"
 
-void Solver::step() const {
+void Solver::step() {
     if (so.algorithmType == AlgorithmType::XPBD) {
-        for (auto& c : so.constraints)
-            c->lambda = 0.0;
+        so.resetLambdaConstraints();
     }
 
     for (auto& p : so.particles) {
@@ -16,13 +15,7 @@ void Solver::step() const {
     }
 
     for (int iter = 0; iter < solverIterations; ++iter) {
-
-        for (auto& c : so.constraints) {
-            c->project(so.algorithmType);
-        }
-
-        for (auto& c : so.collisionConstraints)
-            c->project(so.algorithmType);
+        so.projectConstraints();
     }
 
     for (auto& p : so.particles) {
@@ -33,7 +26,7 @@ void Solver::step() const {
     //for (auto& c : so.constraints) c->print();
 }
 
-void Solver::resetSimulation(Object& obj, double ground) {
+void Solver::resetSimulation(Object& obj, float ground) {
     so.initializeFromObject(obj, ground);
 }
 

@@ -29,7 +29,7 @@ public:
     : particles(particles), stiffness(stiffness), lambda(0.0),
     compliance(compliance), dt(dt), constraintType(ct) {
         cardinality = particles.size();
-        gradient = Eigen::MatrixXd::Zero(3, cardinality);
+        gradient = Eigen::MatrixXf::Zero(3, cardinality);
     };
     virtual ~Constraint();
 
@@ -49,7 +49,7 @@ public:
     unsigned int cardinality;
 protected:
     std::vector<std::shared_ptr<Particle>> particles;
-    Eigen::MatrixXd gradient;
+    Eigen::MatrixXf gradient;
 };
 
 class DistanceConstraint final : public Constraint {
@@ -57,9 +57,9 @@ public:
     DistanceConstraint(
         const std::shared_ptr<Particle>& p0,
         const std::shared_ptr<Particle>& p1,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(std::vector{p0, p1},
         stiffness, compliance, dt, EQUALITY)
     {
@@ -71,22 +71,22 @@ public:
     void project(AlgorithmType algorithmType) override;
     void print() const override;
 private:
-    double restLength;
+    float restLength;
 };
 
 class CollisionConstraint final : public Constraint {
 public:
     std::shared_ptr<Particle> p;
-    Eigen::Vector3d normal;
-    double offset;
+    Eigen::Vector3f normal;
+    float offset;
 
     CollisionConstraint(
         std::shared_ptr<Particle> particle,
-        const Eigen::Vector3d& n,
-        double d,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        const Eigen::Vector3f& n,
+        float d,
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(std::vector{std::move(particle)}, stiffness, compliance, dt, INEQUALITY),
     normal(n.normalized()), offset(d) {}
 
@@ -100,10 +100,10 @@ class ShapeMatchingConstraint final : public Constraint {
 public:
     ShapeMatchingConstraint(
         const std::vector<std::shared_ptr<Particle>>& ps,
-        const std::vector<Eigen::Vector3d>& rest,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        const std::vector<Eigen::Vector3f>& rest,
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(ps, stiffness, compliance, dt, EQUALITY),
     restPositions(rest) {}
 
@@ -113,21 +113,21 @@ public:
     void print() const override;
 
 private:
-    std::vector<Eigen::Vector3d> restPositions;
+    std::vector<Eigen::Vector3f> restPositions;
 };
 
 
 class VolumeConstraint final : public Constraint {
 public:
     std::vector<Eigen::Vector3i> faces;
-    double restVolume;
+    float restVolume;
 
     VolumeConstraint(
         const std::vector<std::shared_ptr<Particle>>& ps,
         const std::vector<Eigen::Vector3i>& fs,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(ps, stiffness, compliance, dt, EQUALITY), faces(fs)
     {
         restVolume = computeVolume();
@@ -139,21 +139,24 @@ public:
     void print() const override;
 
 private:
-    [[nodiscard]] double computeVolume() const;
+    [[nodiscard]] float computeVolume() const;
 };
 
 class FixedPointConstraint : public Constraint {
 public:
-    Eigen::Vector3d fixedPoint;
+    Eigen::Vector3f fixedPoint;
 
     FixedPointConstraint(
-        std::shared_ptr<Particle> p,
-        Eigen::Vector3d  fp,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
-    ) : Constraint(std::vector{std::move(p)}, stiffness,
-        compliance, dt, INEQUALITY), fixedPoint(std::move(fp)) {}
+        std::shared_ptr<Particle>& p,
+        Eigen::Vector3f fp,
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
+    ) : Constraint(std::vector{p}, stiffness,
+        compliance, dt, EQUALITY), fixedPoint(std::move(fp)) {
+        p->m = 0.0;
+        p->w = 0.0;
+    }
 
     float calculateValue() override;
     void calculateGradient() override;
@@ -172,13 +175,13 @@ public:
         std::shared_ptr<Particle> a,
         std::shared_ptr<Particle> b,
         std::shared_ptr<Particle> c,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(std::vector<std::shared_ptr<Particle>>{}, stiffness, compliance, dt), p1(a), p2(b), p3(c) {
-        Eigen::Vector3d e1 = p2->x - p1->x;
+        Eigen::Vector3f e1 = p2->x - p1->x;
 
-        Eigen::Vector3d e2 = p3->x - p1->x;
+        Eigen::Vector3f e2 = p3->x - p1->x;
 
         restArea =
             0.5 * e1.cross(e2).norm();
@@ -189,7 +192,7 @@ public:
 
 private:
 
-    double restArea;
+    float restArea;
 };
 
 class ContinuumTriangleConstraint : public Constraint {
@@ -202,11 +205,11 @@ public:
         const std::shared_ptr<Particle> a,
         const std::shared_ptr<Particle> b,
         const std::shared_ptr<Particle> c,
-        double youngs_modulus,
-        double poisson_ratio,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        float youngs_modulus,
+        float poisson_ratio,
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(stiffness, compliance, dt), p1(a), p2(b), p3(c) {}
 };
 
@@ -214,9 +217,9 @@ class FixedPointConstraint : public Constraint {
     public:
     FixedPointConstraint(
         const std::vector<std::shared_ptr<Particle>>& ps,
-        double stiffness = 1.0,
-        double compliance = 1.0,
-        const double dt = 1.0 / 120.0
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0
     ) : Constraint(stiffness, compliance, dt) {}
 }; */
 

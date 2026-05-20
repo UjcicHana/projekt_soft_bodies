@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
 
         drawUI();
 
-        Eigen::Vector3d gravity = Eigen::Vector3d(ui.gravityX, ui.gravityY, 0);
+        Eigen::Vector3f gravity = Eigen::Vector3f(ui.gravityX, ui.gravityY, 0);
 
         solver.setTimeStep(ui.timeStep);
         solver.setSolverIterations(ui.solverIterations);

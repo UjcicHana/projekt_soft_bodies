@@ -5,12 +5,12 @@
 #include "SimulatedObject.h"
 #include <set>
 
-Eigen::Matrix3d rotationX(double angleRadians)
+Eigen::Matrix3f rotationX(float angleRadians)
 {
-    double c = std::cos(angleRadians);
-    double s = std::sin(angleRadians);
+    float c = std::cos(angleRadians);
+    float s = std::sin(angleRadians);
 
-    Eigen::Matrix3d R;
+    Eigen::Matrix3f R;
     R << 1,  0, 0,
          0,  c, -s,
          0,  s,  c;
@@ -19,21 +19,21 @@ Eigen::Matrix3d rotationX(double angleRadians)
 
 void SimulatedObject::initializeFromObject(
     const Object& obj,
-    double ground,
-    double mass,
-    const Eigen::Vector3d& initialVelocity,
-    const Eigen::Vector3d& initialTranslation,
+    float ground,
+    float mass,
+    const Eigen::Vector3f& initialVelocity,
+    const Eigen::Vector3f& initialTranslation,
     AlgorithmType at)
 {
     algorithmType = at;
     particles.clear();
     restPositions.clear();
 
-    double angleDeg = 0.0;
-    double angleRad = angleDeg * M_PI / 180.0;
-    Eigen::Matrix3d R = rotationX(angleRad);
+    float angleDeg = 0.0f;
+    auto angleRad = static_cast<float>(angleDeg * M_PI / 180.0);
+    Eigen::Matrix3f R = rotationX(angleRad);
 
-    Eigen::Vector3d center = Eigen::Vector3d::Zero();
+    Eigen::Vector3f center = Eigen::Vector3f::Zero();
     for (auto& v : obj.getVertices())
         center += v;
     center /= obj.getVertices().size();
@@ -42,7 +42,7 @@ void SimulatedObject::initializeFromObject(
     {
         auto p = std::make_shared<Particle>();
 
-        Eigen::Vector3d rotated = R * (vertex - center) + center;
+        Eigen::Vector3f rotated = R * (vertex - center) + center;
         p->x = rotated + initialTranslation;
         p->p = p->x;
 
@@ -50,7 +50,7 @@ void SimulatedObject::initializeFromObject(
         p->F.setZero();
 
         p->m = mass;
-        p->w = (p->m > 0.0) ? 1.0 / p->m : 0.0;
+        p->w = (p->m > 0.0) ? 1.0f / p->m : 0;
 
         particles.push_back(p);
         restPositions.push_back(p->p);
@@ -58,22 +58,22 @@ void SimulatedObject::initializeFromObject(
 
     faces = obj.getFaces();
 
-    constraints.clear();
+    resetConstraints();
 
     generateDistanceConstraints(distanceStiffness, distanceCompliance, timeStep);
     generateCollisionConstraints(ground);
-    constraints.push_back(std::make_shared<VolumeConstraint>(
+    volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
     particles, faces, volumeStiffness, volumeCompliance, timeStep));
-    constraints.push_back(std::make_shared<ShapeMatchingConstraint>(
+    shapeMatchingConstraints.push_back(std::make_shared<ShapeMatchingConstraint>(
     particles, restPositions, shapeMatchingStiffness));
-    //constraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], restPositions[0])));
+    //fixedPointConstraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], restPositions[0])));
 
     //for (const auto &c : constraints) c->print();
 
     calculateForces(outsideForces);
 }
 
-void SimulatedObject::generateDistanceConstraints(double stiffness, double compliance, double dt) {
+void SimulatedObject::generateDistanceConstraints(float stiffness, float compliance, float dt) {
 
     std::set<std::pair<int,int>> edges;
 
@@ -89,7 +89,7 @@ void SimulatedObject::generateDistanceConstraints(double stiffness, double compl
     }
 
     for (auto& e : edges) {
-        constraints.push_back(
+        distanceConstraints.push_back(
             std::make_shared<DistanceConstraint>(
                 particles[e.first], particles[e.second],
                 stiffness, compliance, dt));
@@ -97,9 +97,9 @@ void SimulatedObject::generateDistanceConstraints(double stiffness, double compl
 }
 
 
-void SimulatedObject::generateCollisionConstraints(double ground) {
+void SimulatedObject::generateCollisionConstraints(float ground) {
     collisionConstraints.clear();
-    Eigen::Vector3d normal(0, 1, 0);
+    Eigen::Vector3f normal(0, 1, 0);
 
     for (const auto& p : particles) {
         collisionConstraints.push_back(
@@ -110,10 +110,54 @@ void SimulatedObject::generateCollisionConstraints(double ground) {
     }
 }
 
-void SimulatedObject::calculateForces(const Eigen::Vector3d& outside_forces) const {
+void SimulatedObject::calculateForces(const Eigen::Vector3f& outside_forces) const {
 
     for (const auto& particle : particles)
     {
         particle->F = particle->m * outside_forces;
+    }
+}
+
+void SimulatedObject::resetConstraints() {
+    distanceConstraints.clear();
+    volumeConstraints.clear();
+    shapeMatchingConstraints.clear();
+    fixedPointConstraints.clear();
+    collisionConstraints.clear();
+}
+
+void SimulatedObject::resetLambdaConstraints() {
+    for (auto c : distanceConstraints) {
+        c->lambda = 0.0f;
+    }
+    for (auto c : volumeConstraints) {
+        c->lambda = 0.0f;
+    }
+    for (auto c : shapeMatchingConstraints) {
+        c->lambda = 0.0f;
+    }
+    for (auto c : fixedPointConstraints) {
+        c->lambda = 0.0f;
+    }
+    for (auto c : collisionConstraints) {
+        c->lambda = 0.0f;
+    }
+}
+
+void SimulatedObject::projectConstraints() {
+    for (auto c : distanceConstraints) {
+        c->project(algorithmType);
+    }
+    for (auto c : volumeConstraints) {
+        c->project(algorithmType);
+    }
+    for (auto c : shapeMatchingConstraints) {
+        c->project(algorithmType);
+    }
+    for (auto c : fixedPointConstraints) {
+        c->project(algorithmType);
+    }
+    for (auto c : collisionConstraints) {
+        c->project(algorithmType);
     }
 }
