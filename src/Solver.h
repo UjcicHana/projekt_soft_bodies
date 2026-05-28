@@ -10,27 +10,61 @@
 class Solver {
     float timeStep;
     int solverIterations = 10;
-    SimulatedObject so;
+    Eigen::Vector3f ground;
+    std::vector<std::shared_ptr<SimulatedObject>> simObjects;
 public:
-    explicit Solver(Object& obj, float ground, float time_step) : timeStep(time_step) {
-        so.initializeFromObject(obj, ground);
-    };
-    void resetSimulation(Object& obj, float ground);
+    explicit Solver(int iterations, float time_step) : solverIterations(iterations), timeStep(time_step) {};
+    void addSoftBody(Object &obj, float ground) {
+        std::shared_ptr<SimulatedObject> so = std::make_shared<SimulatedObject>();
+        so->initializeFromObject(obj, ground);
+        simObjects.push_back(so);
+    }
+    void resetSimulation();
     void step();
+    //void groundCollision();
 
-    [[nodiscard]] std::vector<std::shared_ptr<Particle>> getParticles() const { return so.particles; };
-    void setTimeStep(const float time_step) { timeStep = time_step; so.timeStep = time_step; };
+    [[nodiscard]] std::vector<std::shared_ptr<Particle>> getParticles(unsigned int pos) const {
+        assert(pos < simObjects.size());
+        return simObjects[pos]->particles;
+    };
+    void setTimeStep(const float time_step) {
+        timeStep = time_step;
+        for (auto so : simObjects) {
+            so->timeStep = time_step;
+        }
+    };
     void setSolverIterations(const int solver_iterations) { solverIterations = solver_iterations; };
-    void setAlgorithmType(const AlgorithmType algorithm_type) { so.algorithmType = algorithm_type; };
+    void setAlgorithmType(const AlgorithmType algorithm_type, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->algorithmType = algorithm_type;
+    };
 
-    void setDistanceStiffness(const float dist_stiffness) { so.distanceStiffness = dist_stiffness; };
-    void setVolumeStiffness(const float volume_stiffness) { so.volumeStiffness = volume_stiffness; };
-    void setShapeMatchingStiffness(const float shape_m_stiffness) { so.shapeMatchingStiffness = shape_m_stiffness; };
+    void setDistanceStiffness(const float dist_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->distanceStiffness = dist_stiffness;
+    };
+    void setVolumeStiffness(const float volume_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->volumeStiffness = volume_stiffness;
+    };
+    void setShapeMatchingStiffness(const float shape_m_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->shapeMatchingStiffness = shape_m_stiffness;
+    };
 
-    void setDistanceCompliance (const float distance_compliance) { so.distanceCompliance = distance_compliance; };
-    void setVolumeCompliance (const float volume_compliance) { so.volumeCompliance = volume_compliance; };
+    void setDistanceCompliance (const float distance_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->distanceCompliance = distance_compliance;
+    };
+    void setVolumeCompliance (const float volume_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->volumeCompliance = volume_compliance;
+    };
 
-    void setOutsideForces(const Eigen::Vector3f& outside_forces) { so.outsideForces = outside_forces; };
+    void setOutsideForces(const Eigen::Vector3f& outside_forces, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->outsideForces = outside_forces;
+    };
 };
 
 

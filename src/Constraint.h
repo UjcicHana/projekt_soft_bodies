@@ -22,9 +22,9 @@ enum ConstraintType {
 class Constraint {
 public:
     Constraint(const std::vector<std::shared_ptr<Particle>> &particles,
-        const double stiffness,
-        const double compliance,
-        const double dt,
+        const float stiffness,
+        const float compliance,
+        const float dt,
         ConstraintType ct)
     : particles(particles), stiffness(stiffness), lambda(0.0),
     compliance(compliance), dt(dt), constraintType(ct) {
@@ -35,16 +35,15 @@ public:
 
     virtual float calculateValue() = 0;
     virtual void calculateGradient() = 0;
-    virtual void project(AlgorithmType algorithmType) = 0;
     virtual void print() const = 0;
 
     void solve(AlgorithmType algorithmType);
     bool isSatisfied();
 
-    double stiffness; // used in PBD, [0,1]
-    double lambda; // used in XPBD
-    double compliance; // used in XPBD
-    double dt; // used in XPBD
+    float stiffness; // used in PBD, [0,1]
+    float lambda; // used in XPBD
+    float compliance; // used in XPBD
+    float dt; // used in XPBD
     ConstraintType constraintType;
     unsigned int cardinality;
 protected:
@@ -68,31 +67,29 @@ public:
 
     float calculateValue() override;
     void calculateGradient() override;
-    void project(AlgorithmType algorithmType) override;
     void print() const override;
 private:
     float restLength;
 };
 
-class CollisionConstraint final : public Constraint {
+class GroundCollisionConstraint final : public Constraint {
 public:
     std::shared_ptr<Particle> p;
     Eigen::Vector3f normal;
     float offset;
 
-    CollisionConstraint(
+    GroundCollisionConstraint(
         std::shared_ptr<Particle> particle,
         const Eigen::Vector3f& n,
         float d,
         float stiffness = 1.0,
-        float compliance = 1.0,
+        float compliance = 0.0,
         const float dt = 1.0 / 120.0
     ) : Constraint(std::vector{std::move(particle)}, stiffness, compliance, dt, INEQUALITY),
     normal(n.normalized()), offset(d) {}
 
     float calculateValue() override;
     void calculateGradient() override;
-    void project(AlgorithmType algorithmType) override;
     void print() const override;
 };
 
@@ -109,7 +106,6 @@ public:
 
     float calculateValue() override;
     void calculateGradient() override;
-    void project(AlgorithmType algorithmType) override;
     void print() const override;
 
 private:
@@ -135,7 +131,6 @@ public:
 
     float calculateValue() override;
     void calculateGradient() override;
-    void project(AlgorithmType algorithmType) override;
     void print() const override;
 
 private:
@@ -160,9 +155,58 @@ public:
 
     float calculateValue() override;
     void calculateGradient() override;
-    void project(AlgorithmType algorithmType) override;
     void print() const override;
 
+};
+
+class CollisionConstraint final : public Constraint {
+public:
+    float h;
+
+    CollisionConstraint(const std::shared_ptr<Particle>& q,
+        const std::shared_ptr<Particle>& p1,
+        const std::shared_ptr<Particle>& p2,
+        const std::shared_ptr<Particle>& p3,
+        float _h = 0.02f,
+        float stiffness = 1.0,
+        float compliance = 0.0,
+        const float dt = 1.0 / 120.0
+    ) : Constraint(std::vector{q, p1, p2, p3}, stiffness, compliance, dt, INEQUALITY),
+    h(_h) {}
+
+    float calculateValue() override;
+    void calculateGradient() override;
+    void print() const override;
+};
+
+class BendingConstraint final : public Constraint {
+public:
+    float phi;
+
+    BendingConstraint(std::shared_ptr<Particle>& p0,
+        std::shared_ptr<Particle>& p1,
+        std::shared_ptr<Particle>& p2,
+        std::shared_ptr<Particle>& p3,
+        float stiffness = 1.0,
+        float compliance = 1.0,
+        const float dt = 1.0 / 120.0)
+    : Constraint(std::vector{p0, p1, p2, p3},
+        stiffness, compliance, dt, EQUALITY) {
+        Eigen::Vector3f n1 = (p1->x - p0->x).cross(p2->x - p0->x).normalized();
+        Eigen::Vector3f n2 = (p1->x - p0->x).cross(p3->x - p0->x).normalized();
+
+        float dot = n1.dot(n2);
+
+        // clamp dot product to -1..1 because of floating point precision
+        if (dot > 1.0f) dot = 1.0f;
+        if (dot < -1.0f) dot = -1.0f;
+
+        phi = acosf(dot);
+    }
+
+    float calculateValue() override;
+    void calculateGradient() override;
+    void print() const override;
 };
 
 /*class TriangleConstraint final : public Constraint {

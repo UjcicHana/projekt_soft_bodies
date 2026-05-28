@@ -9,23 +9,28 @@
 #include "Particle.h"
 #include "Constraint.h"
 
+struct AABB {
+    Eigen::Vector3f min;
+    Eigen::Vector3f max;
+};
+
 class SimulatedObject {
 public:
     // object (changes through time)
     std::vector<std::shared_ptr<Particle>> particles;
+    std::vector<Eigen::Vector3f> initialPositions;
     std::vector<Eigen::Vector3i> faces;
     // constraints
     std::vector<std::shared_ptr<DistanceConstraint>> distanceConstraints;
     std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
     std::vector<std::shared_ptr<ShapeMatchingConstraint>> shapeMatchingConstraints;
     std::vector<std::shared_ptr<FixedPointConstraint>> fixedPointConstraints;
-    std::vector<std::shared_ptr<CollisionConstraint>> collisionConstraints;
+    std::vector<std::shared_ptr<GroundCollisionConstraint>> collisionConstraints;
 
     float timeStep = 1.0 / 120.0;
     AlgorithmType algorithmType;
     float distanceStiffness = 0.7;
     float volumeStiffness = 0.2;
-    std::vector<Eigen::Vector3f> restPositions;
     float shapeMatchingStiffness = 0.1;
     Eigen::Vector3f outsideForces = Eigen::Vector3f(0, -9.8, 0); // default just gravity
     float distanceCompliance = 5e-5;
@@ -39,6 +44,8 @@ public:
         const Eigen::Vector3f& initialTranslation = Eigen::Vector3f(1.0f, 1.5f, 0),
         AlgorithmType at = AlgorithmType::PBD);
 
+    void reset();
+
     // build constraints
     void generateDistanceConstraints(float stiffness, float compliance, float dt);
     void generateCollisionConstraints(float ground);
@@ -48,6 +55,8 @@ public:
     void resetConstraints();
     void resetLambdaConstraints();
     void projectConstraints();
+
+    AABB computeAABB() const;
 
 };
 

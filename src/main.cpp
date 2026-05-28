@@ -163,12 +163,11 @@ int main(int argc, char* argv[]) {
     }
     float ground = -1.0f;
 
-    float dt = 1.0f / 120.0f;
-
-    Solver solver(obj, ground, dt);
+    Solver solver(ui.solverIterations, ui.timeStep);
+    solver.addSoftBody(obj, ground);
     Renderer renderer = Renderer();
     renderer.initGrid(ground);
-    renderer.initMesh(solver.getParticles(), obj.getFaces());
+    renderer.initMesh(solver.getParticles(0), obj.getFaces());
 
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -196,16 +195,16 @@ int main(int argc, char* argv[]) {
 
         solver.setTimeStep(ui.timeStep);
         solver.setSolverIterations(ui.solverIterations);
-        solver.setAlgorithmType(ui.algorithmType);
+        solver.setAlgorithmType(ui.algorithmType, 0);
 
-        solver.setDistanceStiffness(ui.distanceStiffness);
-        solver.setVolumeStiffness(ui.volumeStiffness);
-        solver.setShapeMatchingStiffness(ui.shapeMatchingStiffness);
+        solver.setDistanceStiffness(ui.distanceStiffness, 0);
+        solver.setVolumeStiffness(ui.volumeStiffness, 0);
+        solver.setShapeMatchingStiffness(ui.shapeMatchingStiffness, 0);
 
-        solver.setDistanceCompliance(ui.distanceCompliance);
-        solver.setVolumeCompliance(ui.volumeCompliance);
+        solver.setDistanceCompliance(ui.distanceCompliance, 0);
+        solver.setVolumeCompliance(ui.volumeCompliance, 0);
 
-        solver.setOutsideForces(gravity);
+        solver.setOutsideForces(gravity, 0);
 
         glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -215,11 +214,11 @@ int main(int argc, char* argv[]) {
         }
 
         if (ui.resetSimulation) {
-            solver.resetSimulation(obj, ground);
+            solver.resetSimulation();
             ui.resetSimulation = false;
         }
 
-        renderer.updateMeshFromParticles(solver.getParticles(), obj.getFaces());
+        renderer.updateMeshFromParticles(solver.getParticles(0), obj.getFaces());
 
         Eigen::Affine3f view = Eigen::Affine3f::Identity();
         view.translate(Eigen::Vector3f(0, 0, -4));
