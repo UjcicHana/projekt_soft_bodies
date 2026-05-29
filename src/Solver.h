@@ -47,10 +47,6 @@ public:
         assert(pos < simObjects.size());
         simObjects[pos]->volumeStiffness = volume_stiffness;
     };
-    void setShapeMatchingStiffness(const float shape_m_stiffness, unsigned int pos) {
-        assert(pos < simObjects.size());
-        simObjects[pos]->shapeMatchingStiffness = shape_m_stiffness;
-    };
 
     void setDistanceCompliance (const float distance_compliance, unsigned int pos) {
         assert(pos < simObjects.size());

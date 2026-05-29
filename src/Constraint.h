@@ -57,7 +57,7 @@ public:
         const std::shared_ptr<Particle>& p0,
         const std::shared_ptr<Particle>& p1,
         float stiffness = 1.0,
-        float compliance = 1.0,
+        float compliance = 0.0,
         const float dt = 1.0 / 120.0
     ) : Constraint(std::vector{p0, p1},
         stiffness, compliance, dt, EQUALITY)
@@ -72,13 +72,13 @@ private:
     float restLength;
 };
 
-class GroundCollisionConstraint final : public Constraint {
+class EnvironmentalCollisionConstraint final : public Constraint {
 public:
     std::shared_ptr<Particle> p;
     Eigen::Vector3f normal;
     float offset;
 
-    GroundCollisionConstraint(
+    EnvironmentalCollisionConstraint(
         std::shared_ptr<Particle> particle,
         const Eigen::Vector3f& n,
         float d,
@@ -93,26 +93,6 @@ public:
     void print() const override;
 };
 
-class ShapeMatchingConstraint final : public Constraint {
-public:
-    ShapeMatchingConstraint(
-        const std::vector<std::shared_ptr<Particle>>& ps,
-        const std::vector<Eigen::Vector3f>& rest,
-        float stiffness = 1.0,
-        float compliance = 1.0,
-        const float dt = 1.0 / 120.0
-    ) : Constraint(ps, stiffness, compliance, dt, EQUALITY),
-    restPositions(rest) {}
-
-    float calculateValue() override;
-    void calculateGradient() override;
-    void print() const override;
-
-private:
-    std::vector<Eigen::Vector3f> restPositions;
-};
-
-
 class VolumeConstraint final : public Constraint {
 public:
     std::vector<Eigen::Vector3i> faces;
@@ -122,7 +102,7 @@ public:
         const std::vector<std::shared_ptr<Particle>>& ps,
         const std::vector<Eigen::Vector3i>& fs,
         float stiffness = 1.0,
-        float compliance = 1.0,
+        float compliance = 0.0,
         const float dt = 1.0 / 120.0
     ) : Constraint(ps, stiffness, compliance, dt, EQUALITY), faces(fs)
     {
@@ -145,7 +125,7 @@ public:
         std::shared_ptr<Particle>& p,
         Eigen::Vector3f fp,
         float stiffness = 1.0,
-        float compliance = 1.0,
+        float compliance = 0.0,
         const float dt = 1.0 / 120.0
     ) : Constraint(std::vector{p}, stiffness,
         compliance, dt, EQUALITY), fixedPoint(std::move(fp)) {
@@ -188,7 +168,7 @@ public:
         std::shared_ptr<Particle>& p2,
         std::shared_ptr<Particle>& p3,
         float stiffness = 1.0,
-        float compliance = 1.0,
+        float compliance = 0.0,
         const float dt = 1.0 / 120.0)
     : Constraint(std::vector{p0, p1, p2, p3},
         stiffness, compliance, dt, EQUALITY) {

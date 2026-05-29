@@ -23,15 +23,14 @@ public:
     // constraints
     std::vector<std::shared_ptr<DistanceConstraint>> distanceConstraints;
     std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
-    std::vector<std::shared_ptr<ShapeMatchingConstraint>> shapeMatchingConstraints;
     std::vector<std::shared_ptr<FixedPointConstraint>> fixedPointConstraints;
-    std::vector<std::shared_ptr<GroundCollisionConstraint>> collisionConstraints;
+    std::vector<std::shared_ptr<EnvironmentalCollisionConstraint>> collisionConstraints;
+    std::vector<std::shared_ptr<BendingConstraint>> bendingConstraints;
 
     float timeStep = 1.0 / 120.0;
     AlgorithmType algorithmType;
     float distanceStiffness = 0.7;
     float volumeStiffness = 0.2;
-    float shapeMatchingStiffness = 0.1;
     Eigen::Vector3f outsideForces = Eigen::Vector3f(0, -9.8, 0); // default just gravity
     float distanceCompliance = 5e-5;
     float volumeCompliance = 5e-6;
@@ -48,7 +47,9 @@ public:
 
     // build constraints
     void generateDistanceConstraints(float stiffness, float compliance, float dt);
+    void generateBendingConstraints(float stiffness, float compliance, float dt);
     void generateCollisionConstraints(float ground);
+    void generateClothFixedPointConstraints();
 
     // utils
     void calculateForces(const Eigen::Vector3f& outside_forces) const;

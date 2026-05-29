@@ -119,7 +119,7 @@ void DistanceConstraint::calculateGradient() {
     gradient.col(1) = g2;
 }
 
-void GroundCollisionConstraint::print() const
+void EnvironmentalCollisionConstraint::print() const
 {
     std::cout << "CollisionConstraint: "
               << "particle = " << p->x.transpose()
@@ -128,28 +128,13 @@ void GroundCollisionConstraint::print() const
               << "\n";
 }
 
-float GroundCollisionConstraint::calculateValue() {
+float EnvironmentalCollisionConstraint::calculateValue() {
     return normal.dot(particles[0]->p) - offset;
 }
 
-void GroundCollisionConstraint::calculateGradient() {
+void EnvironmentalCollisionConstraint::calculateGradient() {
     gradient.resize(3, 1);
     gradient.col(0) = normal;
-}
-
-void ShapeMatchingConstraint::print() const {
-        std::cout << "ShapeMatchingConstraint: "
-                  << particles.size()
-                  << " particles, stiffness = "
-                  << stiffness << "\n";
-    }
-
-float ShapeMatchingConstraint::calculateValue() {
-    return 0;
-}
-
-void ShapeMatchingConstraint::calculateGradient() {
-
 }
 
 float VolumeConstraint::computeVolume() const
@@ -223,7 +208,7 @@ void FixedPointConstraint::print() const
 }
 
 float FixedPointConstraint::calculateValue() {
-    return static_cast<float>((particles[0]->p - fixedPoint).norm());
+    return (particles[0]->p - fixedPoint).norm();
 }
 
 void FixedPointConstraint::calculateGradient() {
@@ -382,6 +367,57 @@ float BendingConstraint::calculateValue() {
 }
 
 void BendingConstraint::calculateGradient() {
+    Eigen::Vector3f p0 = particles[0]->p;
+    Eigen::Vector3f p1 = particles[1]->p;
+    Eigen::Vector3f p2 = particles[2]->p;
+    Eigen::Vector3f p3 = particles[3]->p;
+
+    Eigen::Vector3f el = p2 - p0;
+    Eigen::Vector3f em = p1 - p0;
+    Eigen::Vector3f er = p3 - p0;
+
+    // Compute n1 = p1 x p2, n2 = p1 x p3 and cosPhi = n1.n2
+    Eigen::Vector3f n1 = (p1 - p0).cross(p2 - p0);
+    Eigen::Vector3f n2 = (p1 - p0).cross(p3 - p0);
+
+    auto l1 = n1.norm();
+    auto l2 = n2.norm();
+
+    // Check if n1 or n2 are null vectors (i.e. the triangle is degenerate)
+    if (l1 < 1e-8f || l2 < 1e-8f) return;
+
+    // Normalize n1 and n2
+    n1 /= l1;
+    n2 /= l2;
+
+    float cosPhi = n1.dot(n2);
+    if (cosPhi > 1.0f) cosPhi = 1.0f;
+    if (cosPhi < -1.0f) cosPhi = -1.0f;
+
+    float cosPhi2 = cosPhi * cosPhi;
+
+    if (1.0f - cosPhi2 < 1e-6f) return;
+
+    float arcosDerivative = -1.0f / sqrtf(1.0f - cosPhi2);
+    if((n1).cross(n2).dot(em) < 0.0f)
+        arcosDerivative = -arcosDerivative;
+
+    Eigen::Vector3f dp1 = (er.cross(n1) + cosPhi * n2.cross(er)) / l2
+                    + (el.cross(n2) + cosPhi * n1.cross(el)) / l1;
+    Eigen::Vector3f dp2 = (n2.cross(em) - cosPhi * n1.cross(em)) / l1;
+    Eigen::Vector3f dp3 = (n1.cross(em) - cosPhi * n2.cross(em)) / l2;
+
+    //std::cout << "DERIVATIVES: " << toString(dp1) << toString(dp2) << toString(dp3) << std::endl;
+
+    Eigen::Vector3f grad1 = arcosDerivative * dp1;
+    Eigen::Vector3f grad2 = arcosDerivative * dp2;
+    Eigen::Vector3f grad3 = arcosDerivative * dp3;
+    Eigen::Vector3f grad0 = -grad1 - grad2 - grad3;
+
+    gradient.col(0) = grad0;
+    gradient.col(1) = grad1;
+    gradient.col(2) = grad2;
+    gradient.col(3) = grad3;
 
 }
 

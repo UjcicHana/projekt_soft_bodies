@@ -63,22 +63,16 @@ void SimulatedObject::initializeFromObject(
     resetConstraints();
 
     generateDistanceConstraints(distanceStiffness, distanceCompliance, timeStep);
-    generateCollisionConstraints(ground);
+    //generateBendingConstraints(0.9f, 1e-4f, timeStep);
     volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
     particles, faces, volumeStiffness, volumeCompliance, timeStep));
-    //shapeMatchingConstraints.push_back(std::make_shared<ShapeMatchingConstraint>(particles, restPositions, shapeMatchingStiffness));
-    //fixedPointConstraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], restPositions[0])));
+    //generateClothFixedPointConstraints();
+    generateCollisionConstraints(ground);
+    //fixedPointConstraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], initialPositions[0])));
 
     //for (const auto &c : constraints) c->print();
 
     calculateForces(outsideForces);
-}
-
-void SimulatedObject::reset() {
-    for (int i = 0; i < particles.size(); i++) {
-        particles[i]->x = initialPositions[i];
-        particles[i]->p = particles[i]->x;
-    }
 }
 
 void SimulatedObject::generateDistanceConstraints(float stiffness, float compliance, float dt) {
@@ -104,6 +98,72 @@ void SimulatedObject::generateDistanceConstraints(float stiffness, float complia
     }
 }
 
+void SimulatedObject::generateBendingConstraints(
+    float stiffness,
+    float compliance,
+    float dt)
+{
+    bendingConstraints.clear();
+
+    struct EdgeInfo {
+        int opposite;
+        int face;
+    };
+
+    // edge -> adjacent triangle info
+    std::map<std::pair<int,int>, std::vector<EdgeInfo>>
+        edgeMap;
+
+    // Build edge adjacency
+    for (int fi = 0; fi < faces.size(); ++fi)
+    {
+        const auto& f = faces[fi];
+
+        int ids[3] = { f[0], f[1], f[2] };
+
+        for (int i = 0; i < 3; ++i)
+        {
+            int a = ids[i];
+            int b = ids[(i + 1) % 3];
+            int opp = ids[(i + 2) % 3];
+
+            if (a > b)
+                std::swap(a, b);
+
+            edgeMap[{a,b}].push_back({
+                opp,
+                fi
+            });
+        }
+    }
+
+    // Generate bending constraints
+    for (const auto& [edge, adjacent] : edgeMap)
+    {
+        // Need exactly two triangles
+        if (adjacent.size() != 2)
+            continue;
+
+        int p0 = edge.first;
+        int p1 = edge.second;
+
+        int p2 = adjacent[0].opposite;
+        int p3 = adjacent[1].opposite;
+
+        bendingConstraints.push_back(
+            std::make_shared<BendingConstraint>(
+                particles[p0],
+                particles[p1],
+                particles[p2],
+                particles[p3],
+                stiffness,
+                compliance,
+                dt
+            )
+        );
+    }
+}
+
 
 void SimulatedObject::generateCollisionConstraints(float ground) {
     collisionConstraints.clear();
@@ -111,8 +171,60 @@ void SimulatedObject::generateCollisionConstraints(float ground) {
 
     for (const auto& p : particles) {
         collisionConstraints.push_back(
-            std::make_shared<GroundCollisionConstraint>(p, normal, ground));
+            std::make_shared<EnvironmentalCollisionConstraint>(p, normal, ground));
     }
+}
+
+void SimulatedObject::generateClothFixedPointConstraints()
+{
+    if (particles.empty())
+        return;
+
+    int upperLeft  = 0;
+    int upperRight = 0;
+
+    for (int i = 1; i < particles.size(); ++i)
+    {
+        const auto& p = particles[i]->p;
+
+        const auto& left  = particles[upperLeft]->p;
+        const auto& right = particles[upperRight]->p;
+
+        // Upper-left:
+        // prioritize larger Y
+        // tie-break smaller X
+        if (
+            p.y() > left.y() ||
+            (std::abs(p.y() - left.y()) < 1e-6f &&
+             p.x() < left.x())
+        )
+        {
+            upperLeft = i;
+        }
+
+        // Upper-right:
+        // prioritize larger Y
+        // tie-break larger X
+        if (
+            p.y() > right.y() ||
+            (std::abs(p.y() - right.y()) < 1e-6f &&
+             p.x() > right.x())
+        )
+        {
+            upperRight = i;
+        }
+    }
+
+    fixedPointConstraints.push_back(std::make_shared<FixedPointConstraint>
+        (particles[upperLeft], initialPositions[upperLeft]));
+
+    fixedPointConstraints.push_back(std::make_shared<FixedPointConstraint>
+        (particles[upperRight], initialPositions[upperRight]));
+
+    std::cout << "Upper Left  = " << upperLeft << std::endl;
+    std::cout << "Upper Right = " << upperRight << std::endl;
+
+
 }
 
 void SimulatedObject::calculateForces(const Eigen::Vector3f& outside_forces) const {
@@ -123,10 +235,20 @@ void SimulatedObject::calculateForces(const Eigen::Vector3f& outside_forces) con
     }
 }
 
+void SimulatedObject::reset() {
+    for (int i = 0; i < particles.size(); i++) {
+        particles[i]->x = initialPositions[i];
+        particles[i]->p = particles[i]->x;
+        particles[i]->v.setZero();
+        particles[i]->F.setZero();
+        calculateForces(outsideForces);
+    }
+}
+
 void SimulatedObject::resetConstraints() {
     distanceConstraints.clear();
+    bendingConstraints.clear();
     volumeConstraints.clear();
-    shapeMatchingConstraints.clear();
     fixedPointConstraints.clear();
     collisionConstraints.clear();
 }
@@ -135,12 +257,12 @@ void SimulatedObject::resetLambdaConstraints() {
     for (const auto& c : distanceConstraints) {
         c->lambda = 0.0f;
     }
+    for (const auto& c : bendingConstraints) {
+        c->lambda = 0.0f;
+    }
     for (const auto& c : volumeConstraints) {
         c->lambda = 0.0f;
     }
-    // for (const auto& c : shapeMatchingConstraints) {
-    //     c->lambda = 0.0f;
-    // }
     for (const auto& c : collisionConstraints) {
         c->lambda = 0.0f;
     }
@@ -153,12 +275,12 @@ void SimulatedObject::projectConstraints() {
     for (const auto& c : distanceConstraints) {
         c->solve(algorithmType);
     }
+    for (const auto& c : bendingConstraints) {
+        c->solve(algorithmType);
+    }
     for (const auto& c : volumeConstraints) {
         c->solve(algorithmType);
     }
-    // for (const auto& c : shapeMatchingConstraints) {
-    //     c->project(algorithmType);
-    // }
     for (const auto& c : collisionConstraints) {
         c->solve(algorithmType);
     }

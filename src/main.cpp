@@ -30,7 +30,6 @@ struct SimulationUI {
     // PBD attributes
     float distanceStiffness = 0.7f;
     float volumeStiffness = 0.2f;
-    float shapeMatchingStiffness = 0.1f;
 
     // XPBD atributes
     float distanceCompliance = 5e-5f;
@@ -73,8 +72,6 @@ void drawUI() {
         ImGui::SliderFloat("Distance Compliance", &ui.distanceCompliance, 0.0f, 1e-4f, "%.6f");
         ImGui::SliderFloat("Volume Compliance", &ui.volumeCompliance, 0.0f, 1e-5f, "%.7f");
     }
-
-    ImGui::SliderFloat("Shape Matching Stiffness", &ui.shapeMatchingStiffness, 0.0f, 1.0f);
 
     ImGui::Separator();
     ImGui::Text("Gravity");
@@ -199,7 +196,6 @@ int main(int argc, char* argv[]) {
 
         solver.setDistanceStiffness(ui.distanceStiffness, 0);
         solver.setVolumeStiffness(ui.volumeStiffness, 0);
-        solver.setShapeMatchingStiffness(ui.shapeMatchingStiffness, 0);
 
         solver.setDistanceCompliance(ui.distanceCompliance, 0);
         solver.setVolumeCompliance(ui.volumeCompliance, 0);
