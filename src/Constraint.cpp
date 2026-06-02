@@ -27,6 +27,7 @@ void Constraint::solve(AlgorithmType algorithmType) {
             lambda = - stiffness * (C / denominator);
         }
 
+        lambda = std::clamp(lambda, -0.01f, 0.01f);
         for (unsigned int i = 0; i < particles.size(); i++) {
             particles[i]->p += (lambda * particles[i]->w) * gradient.col(i);
             //auto added = (lambda * particles[i]->w) * gradient.col(i);
@@ -335,62 +336,105 @@ void CollisionConstraint::calculateGradient() {
     //std::cout << gradient << std::endl;
 }
 
+float IsometricBendingConstraint::calculateCotTheta(const Eigen::Vector3f& x, const Eigen::Vector3f& y)
+{
+    float denom = x.cross(y).norm();
+
+    if (denom < 1e-8f)
+        return 0.0f;
+
+    return x.dot(y) / denom;
+}
+
+void IsometricBendingConstraint::print() const {
+    std::cout << "BendingConstraint: "
+    << "p0 = " << particles[0]->x.transpose()
+    << ", p1 = " << particles[1]->x.transpose()
+    << ", p2 = " << particles[2]->x.transpose()
+    << ", p3 = " << particles[3]->x.transpose()
+    << ", Q = " << Q
+    << "\n";
+}
+
+float IsometricBendingConstraint::computeEnergy() const {
+    float sum = 0.0f;
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        for (unsigned int j = 0; j < 4; ++j) {
+            sum += Q(i, j) *
+                particles[i]->p.dot(particles[j]->p);
+        }
+    }
+
+    return 0.5f * sum;
+}
+
+float IsometricBendingConstraint::calculateValue() {
+    return computeEnergy() - restValue;
+}
+
+void IsometricBendingConstraint::calculateGradient() {
+    gradient.setZero();
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        Eigen::Vector3f sum = Eigen::Vector3f::Zero();
+        for (unsigned int j = 0; j < 4; ++j) {
+            sum += Q(i, j) * particles[j]->p;
+        }
+        gradient.col(i) = sum;
+    }
+}
+
 void BendingConstraint::print() const {
     std::cout << "BendingConstraint: "
     << "p0 = " << particles[0]->x.transpose()
     << ", p1 = " << particles[1]->x.transpose()
     << ", p2 = " << particles[2]->x.transpose()
     << ", p3 = " << particles[3]->x.transpose()
-    << ", phi = " << phi
+    << ", phi = " << restCosPhi
     << "\n";
 }
 
 float BendingConstraint::calculateValue() {
-    Eigen::Vector3f n1 = (particles[1]->p - particles[0]->p).cross(particles[2]->p - particles[0]->p).normalized();
-    Eigen::Vector3f n2 = (particles[1]->p - particles[0]->p).cross(particles[3]->p - particles[0]->p).normalized();
+    const Eigen::Vector3f& x0 = particles[0]->p;
+    const Eigen::Vector3f& x1 = particles[1]->p;
+    const Eigen::Vector3f& x2 = particles[2]->p;
+    const Eigen::Vector3f& x3 = particles[3]->p;
 
-    Eigen::Vector3f sharedEdgeDir = (particles[1]->p - particles[0]->p).normalized();
+    const Eigen::Vector3f n0 = (x1 - x0).cross(x2 - x0).normalized();
+    const Eigen::Vector3f n1 = (x1 - x0).cross(x3 - x0).normalized();
 
-    float dot = n1.dot(n2);
+    float cosPhi = std::clamp(n0.dot(n1), -1.0f, 1.0f);
+    std::cout << "restCosPhi: " << restCosPhi << " new cosPhi: " << cosPhi << std::endl;
 
-    // clamp dot product to -1..1 because of floating point precision
-    if (dot > 1.0f) dot = 1.0f;
-    if (dot < -1.0f) dot = -1.0f;
-
-    auto newPhi = acosf(dot);
-
-    if(n1.cross(n2).dot(sharedEdgeDir) < 0.0f) newPhi = 2.0f * M_PIf - newPhi;
-
-    //std::cout << "PHI: " << phi - _phi << std::endl;
-
-    return newPhi - phi;
+    return cosPhi - restCosPhi;
 }
 
 void BendingConstraint::calculateGradient() {
-    Eigen::Vector3f p0 = particles[0]->p;
-    Eigen::Vector3f p1 = particles[1]->p;
-    Eigen::Vector3f p2 = particles[2]->p;
-    Eigen::Vector3f p3 = particles[3]->p;
+    Eigen::Vector3f x0 = particles[0]->p;
+    Eigen::Vector3f x1 = particles[1]->p;
+    Eigen::Vector3f x2 = particles[2]->p;
+    Eigen::Vector3f x3 = particles[3]->p;
 
-    Eigen::Vector3f el = p2 - p0;
-    Eigen::Vector3f em = p1 - p0;
-    Eigen::Vector3f er = p3 - p0;
+    Eigen::Vector3f el = x2 - x0;
+    Eigen::Vector3f em = x1 - x0;
+    Eigen::Vector3f er = x3 - x0;
 
     // Compute n1 = p1 x p2, n2 = p1 x p3 and cosPhi = n1.n2
-    Eigen::Vector3f n1 = (p1 - p0).cross(p2 - p0);
-    Eigen::Vector3f n2 = (p1 - p0).cross(p3 - p0);
+    Eigen::Vector3f n0 = (x1 - x0).cross(x2 - x0);
+    Eigen::Vector3f n1 = (x1 - x0).cross(x3 - x0);
 
-    auto l1 = n1.norm();
-    auto l2 = n2.norm();
+    auto l1 = n0.norm();
+    auto l2 = n1.norm();
 
     // Check if n1 or n2 are null vectors (i.e. the triangle is degenerate)
     if (l1 < 1e-8f || l2 < 1e-8f) return;
 
     // Normalize n1 and n2
-    n1 /= l1;
-    n2 /= l2;
+    n0 /= l1;
+    n1 /= l2;
 
-    float cosPhi = n1.dot(n2);
+    float cosPhi = n0.dot(n1);
     if (cosPhi > 1.0f) cosPhi = 1.0f;
     if (cosPhi < -1.0f) cosPhi = -1.0f;
 
@@ -399,13 +443,13 @@ void BendingConstraint::calculateGradient() {
     if (1.0f - cosPhi2 < 1e-6f) return;
 
     float arcosDerivative = -1.0f / sqrtf(1.0f - cosPhi2);
-    if((n1).cross(n2).dot(em) < 0.0f)
+    if((n0).cross(n1).dot(em) < 0.0f)
         arcosDerivative = -arcosDerivative;
 
-    Eigen::Vector3f dp1 = (er.cross(n1) + cosPhi * n2.cross(er)) / l2
-                    + (el.cross(n2) + cosPhi * n1.cross(el)) / l1;
-    Eigen::Vector3f dp2 = (n2.cross(em) - cosPhi * n1.cross(em)) / l1;
-    Eigen::Vector3f dp3 = (n1.cross(em) - cosPhi * n2.cross(em)) / l2;
+    Eigen::Vector3f dp1 = (er.cross(n0) + cosPhi * n1.cross(er)) / l2
+                    + (el.cross(n1) + cosPhi * n0.cross(el)) / l1;
+    Eigen::Vector3f dp2 = (n1.cross(em) - cosPhi * n0.cross(em)) / l1;
+    Eigen::Vector3f dp3 = (n0.cross(em) - cosPhi * n1.cross(em)) / l2;
 
     //std::cout << "DERIVATIVES: " << toString(dp1) << toString(dp2) << toString(dp3) << std::endl;
 
@@ -418,6 +462,12 @@ void BendingConstraint::calculateGradient() {
     gradient.col(1) = grad1;
     gradient.col(2) = grad2;
     gradient.col(3) = grad3;
+
+    std::cout
+    << grad0.norm() << " "
+    << grad1.norm() << " "
+    << grad2.norm() << " "
+    << grad3.norm() << "\n";
 
 }
 

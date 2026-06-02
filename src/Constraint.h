@@ -5,6 +5,7 @@
 #ifndef CONSTRAINT_H
 #define CONSTRAINT_H
 
+#include <iostream>
 #include <utility>
 
 #include "Particle.h"
@@ -159,9 +160,79 @@ public:
     void print() const override;
 };
 
+class IsometricBendingConstraint final : public Constraint {
+public:
+    Eigen::Matrix4f Q;
+    float restValue;
+
+    IsometricBendingConstraint(
+        std::shared_ptr<Particle>& p0,
+        std::shared_ptr<Particle>& p1,
+        std::shared_ptr<Particle>& p2,
+        std::shared_ptr<Particle>& p3,
+        float stiffness = 1.0f,
+        float compliance = 0.0f,
+        float dt = 1.0f / 120.0f
+    ) : Constraint(std::vector{p0,p1,p2,p3}, stiffness, compliance, dt, EQUALITY)
+    {
+        Q.setZero();
+
+        const Eigen::Vector3f& x0 = p0->x;
+        const Eigen::Vector3f& x1 = p1->x;
+        const Eigen::Vector3f& x2 = p2->x;
+        const Eigen::Vector3f& x3 = p3->x;
+
+        const Eigen::Vector3f e0 = x1 - x0;
+        const Eigen::Vector3f e1 = x2 - x1;
+        const Eigen::Vector3f e2 = x0 - x2;
+        const Eigen::Vector3f e3 = x3 - x0;
+        const Eigen::Vector3f e4 = x1 - x3;
+
+        const float cot_01 = calculateCotTheta(e0, -e1);
+        const float cot_02 = calculateCotTheta(e0, -e2);
+        const float cot_03 = calculateCotTheta(e0, e3);
+        const float cot_04 = calculateCotTheta(e0, e4);
+
+        const Eigen::Vector4f K = Eigen::Vector4f(cot_01 + cot_04, cot_02 + cot_03, -cot_01 - cot_02, -cot_03 - cot_04);
+
+        const auto A_0 = 0.5f * e0.cross(e1).norm();
+        const auto A_1 = 0.5f * e0.cross(e3).norm();
+
+        float area = A_0 + A_1;
+
+        if (area < 1e-8f || !std::isfinite(area)) {
+            Q.setZero();
+            return;
+        }
+
+        Q = (3.0f / (2.0f * area)) * K * K.transpose();
+
+        if (!Q.allFinite()) {
+            Q.setZero();
+        }
+        float sum = 0.0f;
+
+        for (unsigned int i = 0; i < 4; ++i) {
+            for (unsigned int j = 0; j < 4; ++j) {
+                sum += Q(i, j) *
+                    particles[i]->x.dot(particles[j]->x);
+            }
+        }
+
+        restValue = 0.5f * sum;
+    }
+
+    float calculateValue() override;
+    void calculateGradient() override;
+    void print() const override;
+private:
+    float computeEnergy() const;
+    static float calculateCotTheta(const Eigen::Vector3f& x, const Eigen::Vector3f& y);
+};
+
 class BendingConstraint final : public Constraint {
 public:
-    float phi;
+    float restCosPhi; // instead of phi
 
     BendingConstraint(std::shared_ptr<Particle>& p0,
         std::shared_ptr<Particle>& p1,
@@ -172,16 +243,17 @@ public:
         const float dt = 1.0 / 120.0)
     : Constraint(std::vector{p0, p1, p2, p3},
         stiffness, compliance, dt, EQUALITY) {
-        Eigen::Vector3f n1 = (p1->x - p0->x).cross(p2->x - p0->x).normalized();
-        Eigen::Vector3f n2 = (p1->x - p0->x).cross(p3->x - p0->x).normalized();
+        const Eigen::Vector3f& x0 = particles[0]->p;
+        const Eigen::Vector3f& x1 = particles[1]->p;
+        const Eigen::Vector3f& x2 = particles[2]->p;
+        const Eigen::Vector3f& x3 = particles[3]->p;
 
-        float dot = n1.dot(n2);
+        const Eigen::Vector3f n0 = (x1 - x0).cross(x2 - x0).normalized();
+        const Eigen::Vector3f n1 = (x1 - x0).cross(x3 - x0).normalized();
 
-        // clamp dot product to -1..1 because of floating point precision
-        if (dot > 1.0f) dot = 1.0f;
-        if (dot < -1.0f) dot = -1.0f;
+        restCosPhi = std::clamp(n0.dot(n1), -1.0f, 1.0f);
 
-        phi = acosf(dot);
+
     }
 
     float calculateValue() override;

@@ -25,7 +25,7 @@ public:
     std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
     std::vector<std::shared_ptr<FixedPointConstraint>> fixedPointConstraints;
     std::vector<std::shared_ptr<EnvironmentalCollisionConstraint>> collisionConstraints;
-    std::vector<std::shared_ptr<BendingConstraint>> bendingConstraints;
+    std::vector<std::shared_ptr<IsometricBendingConstraint>> bendingConstraints;
 
     float timeStep = 1.0 / 120.0;
     AlgorithmType algorithmType;

@@ -63,7 +63,7 @@ void SimulatedObject::initializeFromObject(
     resetConstraints();
 
     generateDistanceConstraints(distanceStiffness, distanceCompliance, timeStep);
-    //generateBendingConstraints(0.9f, 1e-4f, timeStep);
+    //generateBendingConstraints(0.01f, 1e-4f, timeStep);
     volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
     particles, faces, volumeStiffness, volumeCompliance, timeStep));
     //generateClothFixedPointConstraints();
@@ -106,15 +106,12 @@ void SimulatedObject::generateBendingConstraints(
     bendingConstraints.clear();
 
     struct EdgeInfo {
-        int opposite;
         int face;
+        int opposite;
     };
 
-    // edge -> adjacent triangle info
-    std::map<std::pair<int,int>, std::vector<EdgeInfo>>
-        edgeMap;
+    std::map<std::pair<int, int>, std::vector<EdgeInfo>> edgeMap;
 
-    // Build edge adjacency
     for (int fi = 0; fi < faces.size(); ++fi)
     {
         const auto& f = faces[fi];
@@ -127,31 +124,28 @@ void SimulatedObject::generateBendingConstraints(
             int b = ids[(i + 1) % 3];
             int opp = ids[(i + 2) % 3];
 
-            if (a > b)
-                std::swap(a, b);
+            std::pair<int, int> key =
+                std::minmax(a, b);
 
-            edgeMap[{a,b}].push_back({
-                opp,
-                fi
-            });
+            edgeMap[key].push_back({ fi, opp });
         }
     }
 
-    // Generate bending constraints
     for (const auto& [edge, adjacent] : edgeMap)
     {
-        // Need exactly two triangles
         if (adjacent.size() != 2)
             continue;
 
         int p0 = edge.first;
         int p1 = edge.second;
-
         int p2 = adjacent[0].opposite;
         int p3 = adjacent[1].opposite;
 
+        if (p2 == p3 || p2 == p0 || p2 == p1 || p3 == p0 || p3 == p1)
+            continue;
+
         bendingConstraints.push_back(
-            std::make_shared<BendingConstraint>(
+            std::make_shared<IsometricBendingConstraint>(
                 particles[p0],
                 particles[p1],
                 particles[p2],

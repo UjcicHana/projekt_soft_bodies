@@ -46,6 +46,11 @@ void Solver::step() {
             p->v = (p->p - p->x) / timeStep;
             p->x = p->p;
         }
+
+        //velocity damping
+        for (auto& p : so->particles) {
+            p->v *= 0.98f;
+        }
     }
 
     //for (auto& c : so.constraints) c->print();
