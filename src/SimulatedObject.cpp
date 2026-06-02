@@ -25,54 +25,23 @@ void SimulatedObject::initializeFromObject(
     float mass,
     const Eigen::Vector3f& initialVelocity,
     const Eigen::Vector3f& initialTranslation,
-    AlgorithmType at)
-{
-    algorithmType = at;
-    particles.clear();
-    initialPositions.clear();
+    AlgorithmType algorithmType) {
+    simulation.algorithmType = algorithmType;
 
-    float angleDeg = 0.0f;
-    auto angleRad = static_cast<float>(angleDeg * M_PI / 180.0);
-    Eigen::Matrix3f R = rotationX(angleRad);
+    clearState();
 
-    Eigen::Vector3f center = Eigen::Vector3f::Zero();
-    for (auto& v : obj.getVertices())
-        center += v;
-    center /= obj.getVertices().size();
-
-    for (const auto& vertex : obj.getVertices())
-    {
-        auto p = std::make_shared<Particle>();
-
-        Eigen::Vector3f rotated = R * (vertex - center) + center;
-        p->x = rotated + initialTranslation;
-        p->p = p->x;
-
-        p->v = initialVelocity;
-        p->F.setZero();
-
-        p->m = mass;
-        p->w = (p->m > 0.0) ? 1.0f / p->m : 0;
-
-        particles.push_back(p);
-        initialPositions.push_back(p->p);
-    }
+    createParticlesFromObject(
+        obj,
+        mass,
+        initialVelocity,
+        initialTranslation
+    );
 
     faces = obj.getFaces();
 
-    resetConstraints();
+    buildConstraints(ground);
 
-    generateDistanceConstraints(distanceStiffness, distanceCompliance, timeStep);
-    //generateBendingConstraints(0.01f, 1e-4f, timeStep);
-    volumeConstraints.push_back(std::make_shared<VolumeConstraint>(
-    particles, faces, volumeStiffness, volumeCompliance, timeStep));
-    //generateClothFixedPointConstraints();
-    generateCollisionConstraints(ground);
-    //fixedPointConstraints.push_back((std::make_shared<FixedPointConstraint>(particles[0], initialPositions[0])));
-
-    //for (const auto &c : constraints) c->print();
-
-    calculateForces(outsideForces);
+    calculateForces(simulation.externalAcceleration);
 }
 
 void SimulatedObject::generateDistanceConstraints(float stiffness, float compliance, float dt) {
@@ -103,7 +72,7 @@ void SimulatedObject::generateBendingConstraints(
     float compliance,
     float dt)
 {
-    bendingConstraints.clear();
+    isometricBendingConstraints.clear();
 
     struct EdgeInfo {
         int face;
@@ -144,7 +113,7 @@ void SimulatedObject::generateBendingConstraints(
         if (p2 == p3 || p2 == p0 || p2 == p1 || p3 == p0 || p3 == p1)
             continue;
 
-        bendingConstraints.push_back(
+        isometricBendingConstraints.push_back(
             std::make_shared<IsometricBendingConstraint>(
                 particles[p0],
                 particles[p1],
@@ -221,84 +190,210 @@ void SimulatedObject::generateClothFixedPointConstraints()
 
 }
 
-void SimulatedObject::calculateForces(const Eigen::Vector3f& outside_forces) const {
+void SimulatedObject::generateContinuumTriangleConstraints(
+    float stiffness,
+    float compliance,
+    float dt,
+    float youngsModulus,
+    float poissonRatio)
+{
+    continuumTriangleConstraints.clear();
 
+    for (const auto& f : faces)
+    {
+        int i0 = f[0];
+        int i1 = f[1];
+        int i2 = f[2];
+
+        continuumTriangleConstraints.push_back(
+            std::make_shared<ContinuumTriangleConstraint>(
+                particles[i0],
+                particles[i1],
+                particles[i2],
+                stiffness,
+                compliance,
+                dt,
+                youngsModulus,
+                poissonRatio
+            )
+        );
+    }
+}
+
+void SimulatedObject::calculateForces(const Eigen::Vector3f& externalAcceleration) const
+{
     for (const auto& particle : particles)
     {
-        particle->F = particle->m * outside_forces;
+        particle->F =
+            particle->m * externalAcceleration;
     }
 }
 
 void SimulatedObject::reset() {
-    for (int i = 0; i < particles.size(); i++) {
+    for (size_t i = 0; i < particles.size(); ++i) {
         particles[i]->x = initialPositions[i];
         particles[i]->p = particles[i]->x;
+
         particles[i]->v.setZero();
         particles[i]->F.setZero();
-        calculateForces(outsideForces);
     }
+
+    calculateForces(simulation.externalAcceleration);
+    resetLambdaConstraints();
 }
 
-void SimulatedObject::resetConstraints() {
-    distanceConstraints.clear();
-    bendingConstraints.clear();
-    volumeConstraints.clear();
+void SimulatedObject::resetConstraints()
+{
     fixedPointConstraints.clear();
+    distanceConstraints.clear();
+    continuumTriangleConstraints.clear();
+    isometricBendingConstraints.clear();
+    volumeConstraints.clear();
     collisionConstraints.clear();
 }
 
 void SimulatedObject::resetLambdaConstraints() {
+    for (const auto& c : fixedPointConstraints) {
+        c->lambda = 0.0f;
+    }
     for (const auto& c : distanceConstraints) {
         c->lambda = 0.0f;
     }
-    for (const auto& c : bendingConstraints) {
+    for (const auto& c : continuumTriangleConstraints) {
+        c->lambda = 0.0f;
+    }
+    for (const auto& c : isometricBendingConstraints) {
         c->lambda = 0.0f;
     }
     for (const auto& c : volumeConstraints) {
         c->lambda = 0.0f;
     }
     for (const auto& c : collisionConstraints) {
-        c->lambda = 0.0f;
-    }
-    for (const auto& c : fixedPointConstraints) {
         c->lambda = 0.0f;
     }
 }
 
 void SimulatedObject::projectConstraints() {
-    for (const auto& c : distanceConstraints) {
-        c->solve(algorithmType);
+    for (const auto& c : fixedPointConstraints) {
+        c->solve(simulation.algorithmType);
     }
-    for (const auto& c : bendingConstraints) {
-        c->solve(algorithmType);
+    for (const auto& c : distanceConstraints) {
+        c->solve(simulation.algorithmType);
+    }
+    for (const auto& c : continuumTriangleConstraints) {
+        c->solve(simulation.algorithmType);
+    }
+    for (const auto& c : isometricBendingConstraints) {
+        c->solve(simulation.algorithmType);
     }
     for (const auto& c : volumeConstraints) {
-        c->solve(algorithmType);
+        c->solve(simulation.algorithmType);
     }
     for (const auto& c : collisionConstraints) {
-        c->solve(algorithmType);
-    }
-    for (const auto& c : fixedPointConstraints) {
-        c->solve(algorithmType);
+        c->solve(simulation.algorithmType);
     }
 }
 
-AABB SimulatedObject::computeAABB() const
+void SimulatedObject::clearState()
 {
-    AABB box;
+    particles.clear();
+    initialPositions.clear();
+    faces.clear();
 
-    box.min = Eigen::Vector3f(std::numeric_limits<float>::max(),
-            std::numeric_limits<float>::max(),
-            std::numeric_limits<float>::max());
+    resetConstraints();
+}
 
-    box.max = -box.min;
+void SimulatedObject::createParticlesFromObject(
+    const Object& obj,
+    float mass,
+    const Eigen::Vector3f& initialVelocity,
+    const Eigen::Vector3f& initialTranslation)
+{
+    float angleDeg = 0.0f;
+    float angleRad = static_cast<float>(angleDeg * M_PI / 180.0f);
 
-    for (const auto& p : particles)
-    {
-        box.min = box.min.cwiseMin(p->p);
+    Eigen::Matrix3f R = rotationX(angleRad);
 
-        box.max = box.max.cwiseMax(p->p);
+    Eigen::Vector3f center = Eigen::Vector3f::Zero();
+
+    for (const auto& v : obj.getVertices()) {
+        center += v;
     }
 
-    return box;
+    center /= static_cast<float>(obj.getVertices().size());
+
+    for (const auto& vertex : obj.getVertices())
+    {
+        auto particle = std::make_shared<Particle>();
+
+        Eigen::Vector3f rotated =
+            R * (vertex - center) + center;
+
+        particle->x = rotated + initialTranslation;
+        particle->p = particle->x;
+
+        particle->v = initialVelocity;
+        particle->F.setZero();
+
+        particle->m = mass;
+        particle->w = particle->m > 0.0f
+            ? 1.0f / particle->m
+            : 0.0f;
+
+        particles.push_back(particle);
+        initialPositions.push_back(particle->p);
+    }
+}
+
+void SimulatedObject::buildConstraints(float ground)
+{
+    resetConstraints();
+
+    generateDistanceConstraints(
+        material.distanceStiffness,
+        material.distanceCompliance,
+        simulation.timeStep
+    );
+
+    generateContinuumTriangleConstraints(
+        material.continuumStiffness,
+        material.continuumCompliance,
+        simulation.timeStep,
+        material.youngsModulus,
+        material.poissonRatio
+    );
+
+    // Optional while testing
+    /*
+    generateBendingConstraints(
+        material.bendingStiffness,
+        material.bendingCompliance,
+        simulation.timeStep
+    );
+    */
+
+    volumeConstraints.push_back(
+        std::make_shared<VolumeConstraint>(
+            particles,
+            faces,
+            material.volumeStiffness,
+            material.volumeCompliance,
+            simulation.timeStep
+        )
+    );
+
+    // Optional cloth setup
+    // generateClothFixedPointConstraints();
+
+    generateCollisionConstraints(ground);
+
+    // Optional single fixed point test
+    /*
+    fixedPointConstraints.push_back(
+        std::make_shared<FixedPointConstraint>(
+            particles[0],
+            initialPositions[0]
+        )
+    );
+    */
 }

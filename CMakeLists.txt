@@ -48,7 +48,8 @@ add_executable(projekt_soft_bodies
         src/Renderer.cpp
         src/Renderer.h
         src/Solver.cpp
-        src/Solver.h)
+        src/Solver.h
+        src/FEMUtils.h)
 
 target_link_libraries(projekt_soft_bodies
         glad

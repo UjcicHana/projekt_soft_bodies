@@ -30,36 +30,71 @@ public:
     void setTimeStep(const float time_step) {
         timeStep = time_step;
         for (auto so : simObjects) {
-            so->timeStep = time_step;
+            so->simulation.timeStep = time_step;
         }
     };
     void setSolverIterations(const int solver_iterations) { solverIterations = solver_iterations; };
     void setAlgorithmType(const AlgorithmType algorithm_type, unsigned int pos) {
         assert(pos < simObjects.size());
-        simObjects[pos]->algorithmType = algorithm_type;
+        simObjects[pos]->simulation.algorithmType = algorithm_type;
     };
-
-    void setDistanceStiffness(const float dist_stiffness, unsigned int pos) {
-        assert(pos < simObjects.size());
-        simObjects[pos]->distanceStiffness = dist_stiffness;
-    };
-    void setVolumeStiffness(const float volume_stiffness, unsigned int pos) {
-        assert(pos < simObjects.size());
-        simObjects[pos]->volumeStiffness = volume_stiffness;
-    };
-
-    void setDistanceCompliance (const float distance_compliance, unsigned int pos) {
-        assert(pos < simObjects.size());
-        simObjects[pos]->distanceCompliance = distance_compliance;
-    };
-    void setVolumeCompliance (const float volume_compliance, unsigned int pos) {
-        assert(pos < simObjects.size());
-        simObjects[pos]->volumeCompliance = volume_compliance;
-    };
-
     void setOutsideForces(const Eigen::Vector3f& outside_forces, unsigned int pos) {
         assert(pos < simObjects.size());
-        simObjects[pos]->outsideForces = outside_forces;
+        simObjects[pos]->simulation.externalAcceleration = outside_forces;
+    };
+
+    // distance constraint parameters
+    void setDistanceStiffness(const float dist_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.distanceStiffness = dist_stiffness;
+    };
+
+    void setDistanceCompliance(const float distance_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.distanceCompliance = distance_compliance;
+    };
+
+    // volume constraint parameters
+    void setVolumeStiffness(const float volume_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.volumeStiffness = volume_stiffness;
+    };
+
+    void setVolumeCompliance(const float volume_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.volumeCompliance = volume_compliance;
+    };
+
+    // triangle continuum constraint parameters
+    void setContinuumStiffness(const float continuum_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.continuumStiffness = continuum_stiffness;
+    };
+
+    void setContinnumCompliance(const float continuum_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.continuumCompliance = continuum_compliance;
+    };
+
+    void setYoungsModulus(const float youngs_modulus, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.youngsModulus = youngs_modulus;
+    };
+
+    void setPoissonRatio(const float poisson_ratio, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.poissonRatio = poisson_ratio;
+    };
+
+    // bending constraint parameters
+    void setBendingStiffness(const float bending_stiffness, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.bendingStiffness = bending_stiffness;
+    };
+
+    void setBendingCompliance(const float bending_compliance, unsigned int pos) {
+        assert(pos < simObjects.size());
+        simObjects[pos]->material.bendingCompliance = bending_compliance;
     };
 };
 

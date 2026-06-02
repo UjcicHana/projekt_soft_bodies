@@ -9,13 +9,30 @@
 #include "Particle.h"
 #include "Constraint.h"
 
-struct AABB {
-    Eigen::Vector3f min;
-    Eigen::Vector3f max;
-};
-
 class SimulatedObject {
 public:
+    struct SimulationSettings {
+        float timeStep = 1.0f / 120.0f;
+        AlgorithmType algorithmType = AlgorithmType::PBD;
+        Eigen::Vector3f externalAcceleration = Eigen::Vector3f(0.0f, -9.8f, 0.0f);
+    };
+
+    struct MaterialSettings {
+        float distanceStiffness = 0.7f;
+        float distanceCompliance = 5e-5f;
+
+        float volumeStiffness = 0.2f;
+        float volumeCompliance = 5e-6f;
+
+        float continuumStiffness = 0.01f;
+        float continuumCompliance = 1e-4f;
+        float youngsModulus = 100.0f;
+        float poissonRatio = 0.3f;
+
+        float bendingStiffness = 0.01f;
+        float bendingCompliance = 1e-4f;
+    };
+
     // object (changes through time)
     std::vector<std::shared_ptr<Particle>> particles;
     std::vector<Eigen::Vector3f> initialPositions;
@@ -25,15 +42,11 @@ public:
     std::vector<std::shared_ptr<VolumeConstraint>> volumeConstraints;
     std::vector<std::shared_ptr<FixedPointConstraint>> fixedPointConstraints;
     std::vector<std::shared_ptr<EnvironmentalCollisionConstraint>> collisionConstraints;
-    std::vector<std::shared_ptr<IsometricBendingConstraint>> bendingConstraints;
+    std::vector<std::shared_ptr<IsometricBendingConstraint>> isometricBendingConstraints;
+    std::vector<std::shared_ptr<ContinuumTriangleConstraint>> continuumTriangleConstraints;
 
-    float timeStep = 1.0 / 120.0;
-    AlgorithmType algorithmType;
-    float distanceStiffness = 0.7;
-    float volumeStiffness = 0.2;
-    Eigen::Vector3f outsideForces = Eigen::Vector3f(0, -9.8, 0); // default just gravity
-    float distanceCompliance = 5e-5;
-    float volumeCompliance = 5e-6;
+    SimulationSettings simulation;
+    MaterialSettings material;
 
     void initializeFromObject(
         const Object& obj,
@@ -50,15 +63,25 @@ public:
     void generateBendingConstraints(float stiffness, float compliance, float dt);
     void generateCollisionConstraints(float ground);
     void generateClothFixedPointConstraints();
+    void generateContinuumTriangleConstraints(float stiffness, float compliance, float dt,
+        float youngsModulus, float poissonRatio);
 
     // utils
-    void calculateForces(const Eigen::Vector3f& outside_forces) const;
+    void calculateForces(const Eigen::Vector3f& externalAcceleration) const;
     void resetConstraints();
     void resetLambdaConstraints();
     void projectConstraints();
 
-    AABB computeAABB() const;
+private:
+    void clearState();
+    void createParticlesFromObject(
+        const Object& obj,
+        float mass,
+        const Eigen::Vector3f& initialVelocity,
+        const Eigen::Vector3f& initialTranslation
+    );
 
+    void buildConstraints(float ground);
 };
 
 

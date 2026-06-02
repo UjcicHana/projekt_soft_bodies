@@ -8,6 +8,16 @@
 
 Constraint::~Constraint() = default;
 
+Constraint::Constraint(const std::vector<std::shared_ptr<Particle> > &particles,
+    const float stiffness,
+    const float compliance,
+    const float dt,
+    ConstraintType ct)
+    : particles(particles), stiffness(stiffness), lambda(0.0),
+    compliance(compliance), dt(dt), constraintType(ct) {
+    gradient = Eigen::MatrixXf::Zero(3, static_cast<long>(particles.size()));
+};
+
 void Constraint::solve(AlgorithmType algorithmType) {
 
     // If the constraint is already satisfied, no need to solve it
@@ -73,10 +83,6 @@ void Constraint::solve(AlgorithmType algorithmType) {
             //std::cout << "Solve XPBD = " << lambda << std::endl;
         }
 
-        /*lambda += deltaLambda;
-        if (constraintType == ConstraintType::INEQUALITY) {
-            lambda = std::max(0.0f, lambda);
-        }*/
     }
 }
 
@@ -93,16 +99,21 @@ bool Constraint::isSatisfied() {
     throw std::runtime_error("Constraint type not handled");
 }
 
+DistanceConstraint::DistanceConstraint(const std::shared_ptr<Particle> &p0,
+    const std::shared_ptr<Particle> &p1,
+    float stiffness,
+    float compliance,
+    const float dt)
+    : Constraint(std::vector{p0, p1}, stiffness, compliance, dt, EQUALITY) {
+    restLength = (p0->x - p1->x).norm();
+};
+
 void DistanceConstraint::print() const
 {
     std::cout << "DistanceConstraint: "
               << "p1 = " << particles[0]->x.transpose()
               << ", p2 = " << particles[1]->x.transpose()
               << ", restLength = " << restLength
-              << ", stiffness = " << stiffness
-              << ", compliance = " << compliance
-              << ", lambda = " << lambda
-              << ", deltaTime = " << dt
               << "\n";
 }
 
@@ -119,6 +130,15 @@ void DistanceConstraint::calculateGradient() {
     gradient.col(0) = g1;
     gradient.col(1) = g2;
 }
+
+EnvironmentalCollisionConstraint::EnvironmentalCollisionConstraint(std::shared_ptr<Particle> particle,
+    const Eigen::Vector3f &n,
+    float d,
+    float stiffness,
+    float compliance,
+    const float dt)
+    : Constraint(std::vector{std::move(particle)}, stiffness, compliance, dt, INEQUALITY),
+    normal(n.normalized()), offset(d) {}
 
 void EnvironmentalCollisionConstraint::print() const
 {
@@ -138,20 +158,13 @@ void EnvironmentalCollisionConstraint::calculateGradient() {
     gradient.col(0) = normal;
 }
 
-float VolumeConstraint::computeVolume() const
-{
-    float volume = 0.0;
-
-    for (const auto& f : faces) {
-        const Eigen::Vector3f& x0 = particles[f.x()]->p;
-        const Eigen::Vector3f& x1 = particles[f.y()]->p;
-        const Eigen::Vector3f& x2 = particles[f.z()]->p;
-
-        volume += x0.dot(x1.cross(x2));
-    }
-
-    return volume / 6.0f;
-}
+VolumeConstraint::VolumeConstraint(const std::vector<std::shared_ptr<Particle> > &ps,
+    const std::vector<Eigen::Vector3i> &fs,
+    float stiffness,
+    float compliance,
+    float dt)
+    : Constraint(ps, stiffness, compliance, dt, EQUALITY), faces(fs)
+    { restVolume = computeVolume(); }
 
 void VolumeConstraint::print() const
 {
@@ -200,6 +213,32 @@ void VolumeConstraint::calculateGradient() {
     }
 }
 
+float VolumeConstraint::computeVolume() const
+{
+    float volume = 0.0;
+
+    for (const auto& f : faces) {
+        const Eigen::Vector3f& x0 = particles[f.x()]->p;
+        const Eigen::Vector3f& x1 = particles[f.y()]->p;
+        const Eigen::Vector3f& x2 = particles[f.z()]->p;
+
+        volume += x0.dot(x1.cross(x2));
+    }
+
+    return volume / 6.0f;
+}
+
+FixedPointConstraint::FixedPointConstraint(std::shared_ptr<Particle> &p,
+    Eigen::Vector3f fp,
+    float stiffness,
+    float compliance,
+    float dt)
+    : Constraint(std::vector{p}, stiffness, compliance, dt, EQUALITY),
+    fixedPoint(std::move(fp)) {
+    p->m = 0.0;
+    p->w = 0.0;
+}
+
 void FixedPointConstraint::print() const
 {
     std::cout
@@ -216,7 +255,288 @@ void FixedPointConstraint::calculateGradient() {
     gradient.col(0) = (particles[0]->p - fixedPoint).normalized();
 }
 
-void CollisionConstraint::print() const
+IsometricBendingConstraint::IsometricBendingConstraint(std::shared_ptr<Particle> &p0,
+    std::shared_ptr<Particle> &p1,
+    std::shared_ptr<Particle> &p2,
+    std::shared_ptr<Particle> &p3,
+    float stiffness,
+    float compliance,
+    float dt)
+    : Constraint(std::vector{p0,p1,p2,p3}, stiffness, compliance, dt, EQUALITY)
+{
+    Q.setZero();
+
+    const Eigen::Vector3f& x0 = p0->x;
+    const Eigen::Vector3f& x1 = p1->x;
+    const Eigen::Vector3f& x2 = p2->x;
+    const Eigen::Vector3f& x3 = p3->x;
+
+    const Eigen::Vector3f e0 = x1 - x0;
+    const Eigen::Vector3f e1 = x2 - x1;
+    const Eigen::Vector3f e2 = x0 - x2;
+    const Eigen::Vector3f e3 = x3 - x0;
+    const Eigen::Vector3f e4 = x1 - x3;
+
+    const float cot_01 = calculateCotTheta(e0, -e1);
+    const float cot_02 = calculateCotTheta(e0, -e2);
+    const float cot_03 = calculateCotTheta(e0, e3);
+    const float cot_04 = calculateCotTheta(e0, e4);
+
+    const Eigen::Vector4f K = Eigen::Vector4f(cot_01 + cot_04, cot_02 + cot_03, -cot_01 - cot_02, -cot_03 - cot_04);
+
+    const auto A_0 = 0.5f * e0.cross(e1).norm();
+    const auto A_1 = 0.5f * e0.cross(e3).norm();
+
+    float area = A_0 + A_1;
+
+    if (area < 1e-8f || !std::isfinite(area)) {
+        Q.setZero();
+        return;
+    }
+
+    Q = (3.0f / (2.0f * area)) * K * K.transpose();
+
+    if (!Q.allFinite()) {
+        Q.setZero();
+    }
+    float sum = 0.0f;
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        for (unsigned int j = 0; j < 4; ++j) {
+            sum += Q(i, j) *
+                particles[i]->x.dot(particles[j]->x);
+        }
+    }
+
+    restValue = 0.5f * sum;
+}
+
+void IsometricBendingConstraint::print() const {
+    std::cout << "BendingConstraint: "
+    << "p0 = " << particles[0]->x.transpose()
+    << ", p1 = " << particles[1]->x.transpose()
+    << ", p2 = " << particles[2]->x.transpose()
+    << ", p3 = " << particles[3]->x.transpose()
+    << ", Q = " << Q
+    << "\n";
+}
+
+float IsometricBendingConstraint::calculateValue() {
+    float sum = 0.0f;
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        for (unsigned int j = 0; j < 4; ++j) {
+            sum += Q(i, j) *
+                particles[i]->p.dot(particles[j]->p);
+        }
+    }
+
+    return 0.5f * sum - restValue;
+}
+
+void IsometricBendingConstraint::calculateGradient() {
+    gradient.setZero();
+
+    for (unsigned int i = 0; i < 4; ++i) {
+        Eigen::Vector3f sum = Eigen::Vector3f::Zero();
+        for (unsigned int j = 0; j < 4; ++j) {
+            sum += Q(i, j) * particles[j]->p;
+        }
+        gradient.col(i) = sum;
+    }
+}
+
+float IsometricBendingConstraint::calculateCotTheta(const Eigen::Vector3f& x, const Eigen::Vector3f& y)
+{
+    float denom = x.cross(y).norm();
+
+    if (denom < 1e-8f)
+        return 0.0f;
+
+    return x.dot(y) / denom;
+}
+
+ContinuumTriangleConstraint::ContinuumTriangleConstraint(
+    std::shared_ptr<Particle>& p0,
+    std::shared_ptr<Particle>& p1,
+    std::shared_ptr<Particle>& p2,
+    float stiffness,
+    float compliance,
+    float dt,
+    float youngsModulus,
+    float poissonRatio)
+    : Constraint(std::vector{p0, p1, p2}, stiffness, compliance, dt, EQUALITY),
+      firstLame(fem::calcFirstLame(youngsModulus, poissonRatio)),
+      secondLame(fem::calcSecondLame(youngsModulus, poissonRatio))
+{
+    const Eigen::Vector3f& x0 = particles[0]->x;
+    const Eigen::Vector3f& x1 = particles[1]->x;
+    const Eigen::Vector3f& x2 = particles[2]->x;
+
+    Eigen::Vector3f r1 = x1 - x0;
+    Eigen::Vector3f r2 = x2 - x0;
+
+    Eigen::Vector3f cross =
+        r1.cross(r2);
+
+    float crossNorm =
+        cross.norm();
+
+    if (r1.norm() < 1e-8f || crossNorm < 1e-8f) {
+        valid = false;
+        restArea = 0.0f;
+        restDInv.setZero();
+        return;
+    }
+
+    Eigen::Vector3f axis1 =
+        r1.normalized();
+
+    Eigen::Vector3f axis2 =
+        cross.cross(axis1);
+
+    if (axis2.norm() < 1e-8f) {
+        valid = false;
+        restArea = 0.0f;
+        restDInv.setZero();
+        return;
+    }
+
+    axis2.normalize();
+
+    Eigen::Vector2f matX0(
+        axis1.dot(x0),
+        axis2.dot(x0)
+    );
+
+    Eigen::Vector2f matX1(
+        axis1.dot(x1),
+        axis2.dot(x1)
+    );
+
+    Eigen::Vector2f matX2(
+        axis1.dot(x2),
+        axis2.dot(x2)
+    );
+
+    Eigen::Matrix2f restD;
+
+    restD.col(0) = matX1 - matX0;
+
+    restD.col(1) = matX2 - matX0;
+
+    float det = restD.determinant();
+
+    if (std::abs(det) < 1e-8f) {
+        valid = false;
+        restArea = 0.0f;
+        restDInv.setZero();
+        return;
+    }
+
+    restDInv = restD.inverse();
+    restArea = 0.5f * crossNorm;
+}
+
+void ContinuumTriangleConstraint::print() const
+{
+    std::cout
+        << "ContinuumTriangleConstraint | "
+        << "restArea = " << restArea
+        << ", firstLame = " << firstLame
+        << ", secondLame = " << secondLame
+        << ", stiffness = " << stiffness
+        << ", compliance = " << compliance
+        << "\n";
+}
+
+float ContinuumTriangleConstraint::calculateValue()
+{
+    if (!valid)
+        return 0.0f;
+
+    const Eigen::Vector3f& x0 = particles[0]->p;
+    const Eigen::Vector3f& x1 = particles[1]->p;
+    const Eigen::Vector3f& x2 = particles[2]->p;
+
+    Eigen::Matrix<float, 3, 2> D;
+
+    D.col(0) =
+        x1 - x0;
+
+    D.col(1) =
+        x2 - x0;
+
+    Eigen::Matrix<float, 3, 2> F =
+        D * restDInv;
+
+    float psi =
+        fem::calcStVenantKirchhoffEnergyDensity(
+            F,
+            firstLame,
+            secondLame
+        );
+
+    float C =
+        restArea * psi;
+
+    if (!std::isfinite(C))
+        return 0.0f;
+
+    return C;
+}
+
+void ContinuumTriangleConstraint::calculateGradient()
+{
+    gradient.resize(3, 3);
+    gradient.setZero();
+
+    if (!valid)
+        return;
+
+    const Eigen::Vector3f& x0 = particles[0]->p;
+    const Eigen::Vector3f& x1 = particles[1]->p;
+    const Eigen::Vector3f& x2 = particles[2]->p;
+
+    Eigen::Matrix<float, 3, 2> D;
+
+    D.col(0) =
+        x1 - x0;
+
+    D.col(1) =
+        x2 - x0;
+
+    Eigen::Matrix<float, 3, 2> F =
+        D * restDInv;
+
+    Eigen::Matrix<float, 3, 2> P =
+        fem::calcStVenantKirchhoffPiolaStress(
+            F,
+            firstLame,
+            secondLame
+        );
+
+    Eigen::Matrix<float, 3, 2> grad12 =
+        restArea * P * restDInv.transpose();
+
+    Eigen::Vector3f grad0 =
+        -grad12.col(0) - grad12.col(1);
+
+    gradient.col(0) =
+        grad0;
+
+    gradient.col(1) =
+        grad12.col(0);
+
+    gradient.col(2) =
+        grad12.col(1);
+
+    if (!gradient.allFinite()) {
+        gradient.setZero();
+    }
+}
+
+/*void CollisionConstraint::print() const
 {
     std::cout << "CollisionConstraint: "
     << "q = " << particles[0]->x.transpose()
@@ -336,55 +656,6 @@ void CollisionConstraint::calculateGradient() {
     //std::cout << gradient << std::endl;
 }
 
-float IsometricBendingConstraint::calculateCotTheta(const Eigen::Vector3f& x, const Eigen::Vector3f& y)
-{
-    float denom = x.cross(y).norm();
-
-    if (denom < 1e-8f)
-        return 0.0f;
-
-    return x.dot(y) / denom;
-}
-
-void IsometricBendingConstraint::print() const {
-    std::cout << "BendingConstraint: "
-    << "p0 = " << particles[0]->x.transpose()
-    << ", p1 = " << particles[1]->x.transpose()
-    << ", p2 = " << particles[2]->x.transpose()
-    << ", p3 = " << particles[3]->x.transpose()
-    << ", Q = " << Q
-    << "\n";
-}
-
-float IsometricBendingConstraint::computeEnergy() const {
-    float sum = 0.0f;
-
-    for (unsigned int i = 0; i < 4; ++i) {
-        for (unsigned int j = 0; j < 4; ++j) {
-            sum += Q(i, j) *
-                particles[i]->p.dot(particles[j]->p);
-        }
-    }
-
-    return 0.5f * sum;
-}
-
-float IsometricBendingConstraint::calculateValue() {
-    return computeEnergy() - restValue;
-}
-
-void IsometricBendingConstraint::calculateGradient() {
-    gradient.setZero();
-
-    for (unsigned int i = 0; i < 4; ++i) {
-        Eigen::Vector3f sum = Eigen::Vector3f::Zero();
-        for (unsigned int j = 0; j < 4; ++j) {
-            sum += Q(i, j) * particles[j]->p;
-        }
-        gradient.col(i) = sum;
-    }
-}
-
 void BendingConstraint::print() const {
     std::cout << "BendingConstraint: "
     << "p0 = " << particles[0]->x.transpose()
@@ -469,7 +740,7 @@ void BendingConstraint::calculateGradient() {
     << grad2.norm() << " "
     << grad3.norm() << "\n";
 
-}
+} */
 
 
 
