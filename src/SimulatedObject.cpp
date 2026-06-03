@@ -349,43 +349,40 @@ void SimulatedObject::buildConstraints(float ground)
 {
     resetConstraints();
 
-    generateDistanceConstraints(
-        material.distanceStiffness,
-        material.distanceCompliance,
-        simulation.timeStep
-    );
+    if (config.useDistance)
+        generateDistanceConstraints(
+            material.distanceStiffness,
+            material.distanceCompliance,
+            simulation.timeStep);
 
-    generateContinuumTriangleConstraints(
-        material.continuumStiffness,
-        material.continuumCompliance,
-        simulation.timeStep,
-        material.youngsModulus,
-        material.poissonRatio
-    );
+    if (config.useContinuumTriangle)
+        generateContinuumTriangleConstraints(
+            material.continuumStiffness,
+            material.continuumCompliance,
+            simulation.timeStep,
+            material.youngsModulus,
+            material.poissonRatio);
 
-    // Optional while testing
-    /*
-    generateBendingConstraints(
-        material.bendingStiffness,
-        material.bendingCompliance,
-        simulation.timeStep
-    );
-    */
+    if (config.useBending)
+        generateBendingConstraints(
+            material.bendingStiffness,
+            material.bendingCompliance,
+            simulation.timeStep);
 
-    volumeConstraints.push_back(
-        std::make_shared<VolumeConstraint>(
-            particles,
-            faces,
-            material.volumeStiffness,
-            material.volumeCompliance,
-            simulation.timeStep
-        )
-    );
+    if (config.useVolume)
+        volumeConstraints.push_back(
+            std::make_shared<VolumeConstraint>(
+                particles,
+                faces,
+                material.volumeStiffness,
+                material.volumeCompliance,
+                simulation.timeStep));
 
-    // Optional cloth setup
-    // generateClothFixedPointConstraints();
+    if (config.useFixedPoints)
+        generateClothFixedPointConstraints();
 
-    generateCollisionConstraints(ground);
+    if (config.useGroundCollision)
+        generateCollisionConstraints(ground);
 
     // Optional single fixed point test
     /*

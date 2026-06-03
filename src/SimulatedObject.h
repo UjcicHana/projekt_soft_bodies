@@ -33,6 +33,16 @@ public:
         float bendingCompliance = 1e-4f;
     };
 
+    struct ConstraintConfig {
+        bool useDistance = true;
+        bool useVolume = false;
+        bool useFixedPoints = false;
+        bool useBending = false;
+        bool useContinuumTriangle = false;
+        bool useShapeMatching = false;
+        bool useGroundCollision = true;
+    };
+
     // object (changes through time)
     std::vector<std::shared_ptr<Particle>> particles;
     std::vector<Eigen::Vector3f> initialPositions;
@@ -47,6 +57,7 @@ public:
 
     SimulationSettings simulation;
     MaterialSettings material;
+    ConstraintConfig config;
 
     void initializeFromObject(
         const Object& obj,

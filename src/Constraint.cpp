@@ -6,8 +6,6 @@
 
 #include <iostream>
 
-Constraint::~Constraint() = default;
-
 Constraint::Constraint(const std::vector<std::shared_ptr<Particle> > &particles,
     const float stiffness,
     const float compliance,

@@ -23,12 +23,13 @@ enum ConstraintType {
 
 class Constraint {
 public:
+    virtual ~Constraint() = default;
+
     Constraint(const std::vector<std::shared_ptr<Particle>> &particles,
         float stiffness,
         float compliance,
         float dt,
-        ConstraintType ct);;
-    virtual ~Constraint();
+        ConstraintType ct);
 
     virtual float calculateValue() = 0;
     virtual void calculateGradient() = 0;

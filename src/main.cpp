@@ -5,9 +5,6 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
 
 #include <iostream>
 #include <fstream>
@@ -17,6 +14,7 @@
 #include "Object.h"
 #include "Solver.h"
 #include "Renderer.h"
+#include "Scene.h"
 
 struct SimulationUI {
     bool runSimulation = false;
@@ -25,7 +23,7 @@ struct SimulationUI {
     float timeStep = 1.0f / 120.0f;
     int solverIterations = 10;
 
-    AlgorithmType algorithmType = AlgorithmType::XPBD;
+    AlgorithmType algorithmType = AlgorithmType::PBD;
 
     // PBD attributes
     float distanceStiffness = 0.7f;
@@ -50,7 +48,7 @@ void drawUI() {
 
     ImGui::SliderFloat("Time Step", &ui.timeStep, 0.0005f, 0.02f, "%.5f");
 
-    ImGui::SliderInt("Solver Iterations", &ui.solverIterations, 1, 50);
+    ImGui::SliderInt("Solver Iterations", &ui.solverIterations, 1, 40);
 
     int mode = (ui.algorithmType == AlgorithmType::PBD) ? 0 : 1;
 
