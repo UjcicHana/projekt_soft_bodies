@@ -20,90 +20,91 @@ struct SimulationUI {
     bool runSimulation = false;
     bool resetSimulation = false;
 
-    float timeStep = 1.0f / 120.0f;
     int solverIterations = 10;
 
-    AlgorithmType algorithmType = AlgorithmType::PBD;
-
-    // PBD attributes
-    float distanceStiffness = 0.7f;
-    float volumeStiffness = 0.2f;
-
-    // XPBD atributes
-    float distanceCompliance = 5e-5f;
-    float volumeCompliance = 5e-6f;
-
-    float gravityX = 0;
-    float gravityY = -9.8f;
+    int selectedScene = 0;
+    bool sceneChanged = false;
 } ui;
 
-void drawUI() {
-    ImGui::SetNextWindowSize(ImVec2(360, 350), ImGuiCond_Once);
+void drawUI(Scene& scene)
+{
+    ImGui::SetNextWindowSize(ImVec2(390, 420), ImGuiCond_Once);
     ImGui::Begin("Simulation Controls");
 
-    ImGui::PushItemWidth(160.0f);
+    ImGui::PushItemWidth(180.0f);
 
-    ImGui::Separator();
-    ImGui::Text("Time Integration");
+    const char* sceneNames[] = {
+        "Basic Collision",
+        "Cloth Comparison"
+    };
 
-    ImGui::SliderFloat("Time Step", &ui.timeStep, 0.0005f, 0.02f, "%.5f");
+    int previousScene = ui.selectedScene;
 
-    ImGui::SliderInt("Solver Iterations", &ui.solverIterations, 1, 40);
+    ImGui::Combo(
+        "Scene",
+        &ui.selectedScene,
+        sceneNames,
+        IM_ARRAYSIZE(sceneNames)
+    );
 
-    int mode = (ui.algorithmType == AlgorithmType::PBD) ? 0 : 1;
-
-    ImGui::Text("Algorithm");
-
-    ImGui::RadioButton("PBD", &mode, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("XPBD", &mode, 1);
-
-    ui.algorithmType = (mode == 0) ? AlgorithmType::PBD : AlgorithmType::XPBD;
-
-    ImGui::Separator();
-    ImGui::Text("Soft Body Parameters");
-
-    if (mode == 0) { // PBD
-        ImGui::SliderFloat("Distance Stiffness", &ui.distanceStiffness, 0.0f, 1.0f);
-        ImGui::SliderFloat("Volume Stiffness", &ui.volumeStiffness, 0.0f, 1.0f);
-    } else {
-        ImGui::SliderFloat("Distance Compliance", &ui.distanceCompliance, 0.0f, 1e-4f, "%.6f");
-        ImGui::SliderFloat("Volume Compliance", &ui.volumeCompliance, 0.0f, 1e-5f, "%.7f");
+    if (ui.selectedScene != previousScene) {
+        ui.sceneChanged = true;
     }
 
-    ImGui::Separator();
-    ImGui::Text("Gravity");
-
-    ImGui::SliderFloat("Gravity X", &ui.gravityX, -50.0f, 20.0f);
-    ImGui::SliderFloat("Gravity Y", &ui.gravityY, -50.0f, 20.0f);
-
-    if (ImGui::Button("Reset Gravity")) {
-        ui.gravityX = 0.0f;
-        ui.gravityY = -9.8f;
-    }
+    ImGui::Text("Scene: %s", scene.name().c_str());
 
     ImGui::Separator();
 
-    if (ui.runSimulation) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // red
-        if (ImGui::Button("Stop Simulation")) {
+    ImGui::Text("Solver");
+
+    ImGui::SliderInt(
+        "Solver Iterations",
+        &ui.solverIterations,
+        1,
+        40
+    );
+
+    scene.drawUI();
+
+    ImGui::Separator();
+
+    if (ui.runSimulation)
+    {
+        ImGui::PushStyleColor(
+            ImGuiCol_Button,
+            ImVec4(0.8f, 0.2f, 0.2f, 1.0f)
+        );
+
+        if (ImGui::Button("Stop Simulation"))
+        {
             ui.runSimulation = false;
         }
+
         ImGui::PopStyleColor();
-    } else {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // green
-        if (ImGui::Button("Run Simulation")) {
+    }
+    else
+    {
+        ImGui::PushStyleColor(
+            ImGuiCol_Button,
+            ImVec4(0.2f, 0.7f, 0.2f, 1.0f)
+        );
+
+        if (ImGui::Button("Run Simulation"))
+        {
             ui.runSimulation = true;
         }
+
         ImGui::PopStyleColor();
     }
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Reset Simulation")) {
+    if (ImGui::Button("Reset Simulation"))
+    {
         ui.resetSimulation = true;
     }
 
+    ImGui::PopItemWidth();
     ImGui::End();
 }
 
@@ -146,23 +147,34 @@ int main(int argc, char* argv[]) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
 
-    if (argc < 2) {
-        std::cerr << "Usage: ./program model.obj\n";
-        return -1;
-    }
 
-    Object obj;
-    if (!obj.loadObject(argv[1])) {
-        std::cerr << "Failed to load OBJ\n";
-        return -1;
-    }
-    float ground = -1.0f;
+    std::vector<std::unique_ptr<Scene>> scenes;
 
-    Solver solver(ui.solverIterations, ui.timeStep);
-    solver.addSoftBody(obj, ground);
-    Renderer renderer = Renderer();
-    renderer.initGrid(ground);
-    renderer.initMesh(solver.getParticles(0), obj.getFaces());
+    scenes.push_back(std::make_unique<BasicCollisionScene>());
+    scenes.push_back(std::make_unique<ClothComparisonScene>());
+
+    int currentSceneIndex = 0;
+    Scene* currentScene = scenes[currentSceneIndex].get();
+
+    Solver solver(ui.solverIterations, 1.0f / 120.0f);
+
+    Renderer renderer;
+
+    auto rebuildScene = [&]() {
+        solver.clearObjects();
+
+        currentScene = scenes[currentSceneIndex].get();
+        currentScene->setup(solver);
+
+        renderer.initGrid(currentScene->ground);
+        renderer.initMesh(
+            solver.getParticles(0),
+            solver.getFaces(0)
+        );
+    };
+
+    rebuildScene();
+
 
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -184,21 +196,23 @@ int main(int argc, char* argv[]) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        drawUI();
+        drawUI(*currentScene);
 
-        Eigen::Vector3f gravity = Eigen::Vector3f(ui.gravityX, ui.gravityY, 0);
+        if (ui.sceneChanged)
+        {
+            currentSceneIndex = ui.selectedScene;
+            rebuildScene();
 
-        solver.setTimeStep(ui.timeStep);
+            ui.runSimulation = false;
+            ui.sceneChanged = false;
+        }
+
         solver.setSolverIterations(ui.solverIterations);
-        solver.setAlgorithmType(ui.algorithmType, 0);
 
-        solver.setDistanceStiffness(ui.distanceStiffness, 0);
-        solver.setVolumeStiffness(ui.volumeStiffness, 0);
-
-        solver.setDistanceCompliance(ui.distanceCompliance, 0);
-        solver.setVolumeCompliance(ui.volumeCompliance, 0);
-
-        solver.setOutsideForces(gravity, 0);
+        if (auto object = currentScene->getObject())
+        {
+            solver.setTimeStep(object->simulation.timeStep);
+        }
 
         glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -207,12 +221,14 @@ int main(int argc, char* argv[]) {
             solver.step();
         }
 
-        if (ui.resetSimulation) {
-            solver.resetSimulation();
+        if (ui.resetSimulation)
+        {
+            rebuildScene();
+
             ui.resetSimulation = false;
         }
 
-        renderer.updateMeshFromParticles(solver.getParticles(0), obj.getFaces());
+        renderer.updateMeshFromParticles(solver.getParticles(0), solver.getFaces(0));
 
         Eigen::Affine3f view = Eigen::Affine3f::Identity();
         view.translate(Eigen::Vector3f(0, 0, -4));

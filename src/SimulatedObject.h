@@ -13,6 +13,7 @@ class SimulatedObject {
 public:
     struct SimulationSettings {
         float timeStep = 1.0f / 120.0f;
+        int solverIterations = 10;
         AlgorithmType algorithmType = AlgorithmType::PBD;
         Eigen::Vector3f externalAcceleration = Eigen::Vector3f(0.0f, -9.8f, 0.0f);
     };
@@ -57,7 +58,7 @@ public:
 
     SimulationSettings simulation;
     MaterialSettings material;
-    ConstraintConfig config;
+    ConstraintConfig constraintSettings;
 
     void initializeFromObject(
         const Object& obj,
@@ -82,6 +83,7 @@ public:
     void resetConstraints();
     void resetLambdaConstraints();
     void projectConstraints();
+    void applyMaterialSettingsToConstraints();
 
 private:
     void clearState();

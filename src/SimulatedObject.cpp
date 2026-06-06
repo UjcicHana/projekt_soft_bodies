@@ -184,8 +184,8 @@ void SimulatedObject::generateClothFixedPointConstraints()
     fixedPointConstraints.push_back(std::make_shared<FixedPointConstraint>
         (particles[upperRight], initialPositions[upperRight]));
 
-    std::cout << "Upper Left  = " << upperLeft << std::endl;
-    std::cout << "Upper Right = " << upperRight << std::endl;
+    //std::cout << "Upper Left  = " << particles[upperLeft]->p.transpose() << std::endl;
+    //std::cout << "Upper Right = " << particles[upperRight]->p.transpose() << std::endl;
 
 
 }
@@ -349,13 +349,13 @@ void SimulatedObject::buildConstraints(float ground)
 {
     resetConstraints();
 
-    if (config.useDistance)
+    if (constraintSettings.useDistance)
         generateDistanceConstraints(
             material.distanceStiffness,
             material.distanceCompliance,
             simulation.timeStep);
 
-    if (config.useContinuumTriangle)
+    if (constraintSettings.useContinuumTriangle)
         generateContinuumTriangleConstraints(
             material.continuumStiffness,
             material.continuumCompliance,
@@ -363,13 +363,13 @@ void SimulatedObject::buildConstraints(float ground)
             material.youngsModulus,
             material.poissonRatio);
 
-    if (config.useBending)
+    if (constraintSettings.useBending)
         generateBendingConstraints(
             material.bendingStiffness,
             material.bendingCompliance,
             simulation.timeStep);
 
-    if (config.useVolume)
+    if (constraintSettings.useVolume)
         volumeConstraints.push_back(
             std::make_shared<VolumeConstraint>(
                 particles,
@@ -378,10 +378,10 @@ void SimulatedObject::buildConstraints(float ground)
                 material.volumeCompliance,
                 simulation.timeStep));
 
-    if (config.useFixedPoints)
+    if (constraintSettings.useFixedPoints)
         generateClothFixedPointConstraints();
 
-    if (config.useGroundCollision)
+    if (constraintSettings.useGroundCollision)
         generateCollisionConstraints(ground);
 
     // Optional single fixed point test
@@ -393,4 +393,45 @@ void SimulatedObject::buildConstraints(float ground)
         )
     );
     */
+}
+
+void SimulatedObject::applyMaterialSettingsToConstraints()
+{
+    for (auto& c : fixedPointConstraints)
+    {
+        c->dt = simulation.timeStep;
+    }
+
+    for (auto& c : distanceConstraints)
+    {
+        c->stiffness = material.distanceStiffness;
+        c->compliance = material.distanceCompliance;
+        c->dt = simulation.timeStep;
+    }
+
+    for (auto& c : continuumTriangleConstraints)
+    {
+        c->stiffness = material.continuumStiffness;
+        c->compliance = material.continuumCompliance;
+        c->dt = simulation.timeStep;
+    }
+
+    for (auto& c : isometricBendingConstraints)
+    {
+        c->stiffness = material.bendingStiffness;
+        c->compliance = material.bendingCompliance;
+        c->dt = simulation.timeStep;
+    }
+
+    for (auto& c : volumeConstraints)
+    {
+        c->stiffness = material.volumeStiffness;
+        c->compliance = material.volumeCompliance;
+        c->dt = simulation.timeStep;
+    }
+
+    for (auto& c : collisionConstraints)
+    {
+        c->dt = simulation.timeStep;
+    }
 }

@@ -19,6 +19,25 @@ public:
         so->initializeFromObject(obj, ground);
         simObjects.push_back(so);
     }
+    void clearObjects() {
+        simObjects.clear();
+    }
+    void addSimulatedObject(const std::shared_ptr<SimulatedObject>& so) {
+        simObjects.push_back(so);
+    }
+    [[nodiscard]] size_t objectCount() const {
+        return simObjects.size();
+    }
+
+    [[nodiscard]] std::shared_ptr<SimulatedObject> getObject(unsigned int pos) const {
+        assert(pos < simObjects.size());
+        return simObjects[pos];
+    }
+
+    [[nodiscard]] const std::vector<std::shared_ptr<SimulatedObject>>& getObjects() const {
+        return simObjects;
+    }
+
     void resetSimulation();
     void step();
     //void groundCollision();
@@ -27,6 +46,12 @@ public:
         assert(pos < simObjects.size());
         return simObjects[pos]->particles;
     };
+
+    [[nodiscard]] std::vector<Eigen::Vector3i> getFaces(unsigned int pos) const {
+        assert(pos < simObjects.size());
+        return simObjects[pos]->faces;
+    }
+
     void setTimeStep(const float time_step) {
         timeStep = time_step;
         for (auto so : simObjects) {
@@ -71,7 +96,7 @@ public:
         simObjects[pos]->material.continuumStiffness = continuum_stiffness;
     };
 
-    void setContinnumCompliance(const float continuum_compliance, unsigned int pos) {
+    void setContinuumCompliance(const float continuum_compliance, unsigned int pos) {
         assert(pos < simObjects.size());
         simObjects[pos]->material.continuumCompliance = continuum_compliance;
     };

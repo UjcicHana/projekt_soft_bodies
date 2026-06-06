@@ -14,14 +14,14 @@ namespace fem {
         float poissonRatio)
     {
         return (youngsModulus * poissonRatio) /
-               ((1.0 + poissonRatio) * (1.0 - 2.0 * poissonRatio));
+               ((1.0f + poissonRatio) * (1.0f - 2.0f * poissonRatio));
     }
 
     inline float calcSecondLame(
         float youngsModulus,
         float poissonRatio)
     {
-        return youngsModulus / (2.0 * (1.0 + poissonRatio));
+        return youngsModulus / (2.0f * (1.0f + poissonRatio));
     }
 
     inline float calcStVenantKirchhoffEnergyDensity(
