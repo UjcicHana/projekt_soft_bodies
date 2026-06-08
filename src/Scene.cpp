@@ -120,15 +120,11 @@ void ClothComparisonScene::setup(Solver& solver)
     simulatedObject->material.bendingCompliance = bendingCompliance;
 
     simulatedObject->constraintSettings.useDistance = true;
-
     simulatedObject->constraintSettings.useFixedPoints = true;
+    simulatedObject->constraintSettings.useBending = true;
 
-    simulatedObject->constraintSettings.useBending = useBending;
-
-    simulatedObject->constraintSettings.useGroundCollision = useGroundCollision;
-
+    simulatedObject->constraintSettings.useGroundCollision = false;
     simulatedObject->constraintSettings.useVolume = false;
-
     simulatedObject->constraintSettings.useContinuumTriangle = false;
 
     simulatedObject->initializeFromObject(
@@ -168,31 +164,16 @@ void ClothComparisonScene::drawUI()
 
     ImGui::Separator();
 
-    ImGui::Checkbox(
-        "Use Bending Constraint",
-        &useBending
-    );
-
-    ImGui::Checkbox(
-        "Use Ground Collision",
-        &useGroundCollision
-    );
-
-    ImGui::Separator();
-
     if (algorithmType == AlgorithmType::PBD)
     {
         ImGui::SliderFloat("Distance Stiffness", &distanceStiffness, 0.0f, 1.0f);
 
-        if (useBending) {
-            ImGui::SliderFloat("Bending Stiffness", &bendingStiffness, 0.0f, 0.05f, "%.5f");
-        }
+        ImGui::SliderFloat("Bending Stiffness", &bendingStiffness, 0.0f, 0.05f, "%.5f");
+
     } else {
         ImGui::SliderFloat("Distance Compliance", &distanceCompliance, 0.0f, 1e-4f, "%.6f");
 
-        if (useBending) {
-            ImGui::SliderFloat("Bending Compliance", &bendingCompliance, 0.0f, 1e-2f, "%.6f");
-        }
+        ImGui::SliderFloat("Bending Compliance", &bendingCompliance, 0.0f, 1e-2f, "%.6f");
     }
 
     ImGui::Separator();
@@ -227,6 +208,364 @@ void ClothComparisonScene::drawUI()
         simulatedObject->applyMaterialSettingsToConstraints();
     }
 
+}
+
+void ConstraintComparisonScene::setup(Solver& solver)
+{
+    solver.clearObjects();
+
+    object = Object();
+
+    if (!object.loadObject(objectPath))
+    {
+        std::cerr << "Failed to load ablation scene object: "
+                  << objectPath
+                  << std::endl;
+        return;
+    }
+
+    simulatedObject = std::make_shared<SimulatedObject>();
+
+    simulatedObject->simulation.timeStep = timeStep;
+
+    simulatedObject->simulation.algorithmType = algorithmType;
+
+    simulatedObject->simulation.externalAcceleration = externalAcceleration;
+
+    simulatedObject->material.distanceStiffness = distanceStiffness;
+
+    simulatedObject->material.distanceCompliance =
+        distanceCompliance;
+
+    simulatedObject->material.volumeStiffness =
+        volumeStiffness;
+
+    simulatedObject->material.volumeCompliance =
+        volumeCompliance;
+
+    simulatedObject->material.bendingStiffness =
+        bendingStiffness;
+
+    simulatedObject->material.bendingCompliance =
+        bendingCompliance;
+
+    simulatedObject->material.continuumStiffness =
+        continuumStiffness;
+
+    simulatedObject->material.continuumCompliance =
+        continuumCompliance;
+
+    simulatedObject->material.youngsModulus =
+        youngsModulus;
+
+    simulatedObject->material.poissonRatio =
+        poissonRatio;
+
+    simulatedObject->constraintSettings.useDistance =
+        useDistance;
+
+    simulatedObject->constraintSettings.useVolume =
+        useVolume;
+
+    simulatedObject->constraintSettings.useBending =
+        useBending;
+
+    simulatedObject->constraintSettings.useContinuumTriangle =
+        useContinuumTriangle;
+
+    simulatedObject->constraintSettings.useGroundCollision =
+        useGroundCollision;
+
+    simulatedObject->constraintSettings.useFixedPoints =
+        false;
+
+    simulatedObject->initializeFromObject(
+        object,
+        ground,
+        mass,
+        initialVelocity,
+        initialTranslation,
+        algorithmType
+    );
+
+    solver.addSimulatedObject(simulatedObject);
+}
+
+void ConstraintComparisonScene::reset(Solver& solver)
+{
+    setup(solver);
+}
+
+void ConstraintComparisonScene::drawUI()
+{
+    ImGui::Text("Example: Constraint Comparison");
+
+    ImGui::Separator();
+
+    int mode =
+        algorithmType == AlgorithmType::PBD
+        ? 0
+        : 1;
+
+    ImGui::Text("Algorithm");
+
+    ImGui::RadioButton("PBD", &mode, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("XPBD", &mode, 1);
+
+    algorithmType =
+        mode == 0
+        ? AlgorithmType::PBD
+        : AlgorithmType::XPBD;
+
+    ImGui::Separator();
+
+    ImGui::SliderFloat(
+        "Time Step",
+        &timeStep,
+        0.0005f,
+        0.02f,
+        "%.5f"
+    );
+
+    ImGui::DragFloat(
+        "Mass",
+        &mass,
+        0.01f,
+        0.01f,
+        100.0f
+    );
+
+    ImGui::DragFloat3(
+        "Initial Translation",
+        initialTranslation.data(),
+        0.01f
+    );
+
+    ImGui::Separator();
+
+    ImGui::Text("Constraint Set");
+
+    ImGui::Checkbox(
+        "Distance",
+        &useDistance
+    );
+
+    ImGui::Checkbox(
+        "Volume",
+        &useVolume
+    );
+
+    ImGui::Checkbox(
+        "Bending",
+        &useBending
+    );
+
+    ImGui::Checkbox(
+        "Continuum Triangle",
+        &useContinuumTriangle
+    );
+
+    ImGui::Checkbox(
+        "Ground Collision",
+        &useGroundCollision
+    );
+
+    ImGui::TextWrapped(
+        "Changing enabled constraints requires Reset Simulation."
+    );
+
+    ImGui::Separator();
+
+    if (algorithmType == AlgorithmType::PBD)
+    {
+        if (useDistance)
+        {
+            ImGui::SliderFloat(
+                "Distance Stiffness",
+                &distanceStiffness,
+                0.0f,
+                1.0f
+            );
+        }
+
+        if (useVolume)
+        {
+            ImGui::SliderFloat(
+                "Volume Stiffness",
+                &volumeStiffness,
+                0.0f,
+                1.0f
+            );
+        }
+
+        if (useBending)
+        {
+            ImGui::SliderFloat(
+                "Bending Stiffness",
+                &bendingStiffness,
+                0.0f,
+                0.05f,
+                "%.5f"
+            );
+        }
+
+        if (useContinuumTriangle)
+        {
+            ImGui::SliderFloat(
+                "Continuum Stiffness",
+                &continuumStiffness,
+                0.0f,
+                0.1f,
+                "%.5f"
+            );
+        }
+    }
+    else
+    {
+        if (useDistance)
+        {
+            ImGui::SliderFloat(
+                "Distance Compliance",
+                &distanceCompliance,
+                0.0f,
+                1e-4f,
+                "%.6f"
+            );
+        }
+
+        if (useVolume)
+        {
+            ImGui::SliderFloat(
+                "Volume Compliance",
+                &volumeCompliance,
+                0.0f,
+                1e-5f,
+                "%.7f"
+            );
+        }
+
+        if (useBending)
+        {
+            ImGui::SliderFloat(
+                "Bending Compliance",
+                &bendingCompliance,
+                0.0f,
+                1e-2f,
+                "%.6f"
+            );
+        }
+
+        if (useContinuumTriangle)
+        {
+            ImGui::SliderFloat(
+                "Continuum Compliance",
+                &continuumCompliance,
+                0.0f,
+                1e-3f,
+                "%.7f"
+            );
+        }
+    }
+
+    if (useContinuumTriangle)
+    {
+        ImGui::Separator();
+
+        ImGui::Text("Continuum Material");
+
+        ImGui::DragFloat(
+            "Young's Modulus",
+            &youngsModulus,
+            1.0f,
+            1.0f,
+            10000.0f
+        );
+
+        ImGui::SliderFloat(
+            "Poisson Ratio",
+            &poissonRatio,
+            0.0f,
+            0.49f,
+            "%.3f"
+        );
+
+        poissonRatio =
+            std::clamp(poissonRatio, 0.0f, 0.49f);
+
+        ImGui::TextWrapped(
+            "Changing Young's modulus or Poisson ratio requires Reset Simulation "
+            "unless ContinuumTriangleConstraint updates material values dynamically."
+        );
+    }
+
+    ImGui::Separator();
+
+    ImGui::Text("Gravity");
+
+    ImGui::SliderFloat(
+        "Gravity X",
+        &externalAcceleration.x(),
+        -50.0f,
+        20.0f
+    );
+
+    ImGui::SliderFloat(
+        "Gravity Y",
+        &externalAcceleration.y(),
+        -50.0f,
+        20.0f
+    );
+
+    if (ImGui::Button("Reset Gravity"))
+    {
+        externalAcceleration =
+            Eigen::Vector3f(0.0f, -9.8f, 0.0f);
+    }
+
+    if (simulatedObject)
+    {
+        simulatedObject->simulation.timeStep =
+            timeStep;
+
+        simulatedObject->simulation.algorithmType =
+            algorithmType;
+
+        simulatedObject->simulation.externalAcceleration =
+            externalAcceleration;
+
+        simulatedObject->material.distanceStiffness =
+            distanceStiffness;
+
+        simulatedObject->material.distanceCompliance =
+            distanceCompliance;
+
+        simulatedObject->material.volumeStiffness =
+            volumeStiffness;
+
+        simulatedObject->material.volumeCompliance =
+            volumeCompliance;
+
+        simulatedObject->material.bendingStiffness =
+            bendingStiffness;
+
+        simulatedObject->material.bendingCompliance =
+            bendingCompliance;
+
+        simulatedObject->material.continuumStiffness =
+            continuumStiffness;
+
+        simulatedObject->material.continuumCompliance =
+            continuumCompliance;
+
+        simulatedObject->material.youngsModulus =
+            youngsModulus;
+
+        simulatedObject->material.poissonRatio =
+            poissonRatio;
+
+        simulatedObject->applyMaterialSettingsToConstraints();
+    }
 }
 
 /*

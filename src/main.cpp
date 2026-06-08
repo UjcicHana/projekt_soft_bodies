@@ -10,8 +10,8 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <chrono>
 
-#include "Object.h"
 #include "Solver.h"
 #include "Renderer.h"
 #include "Scene.h"
@@ -35,7 +35,8 @@ void drawUI(Scene& scene)
 
     const char* sceneNames[] = {
         "Basic Collision",
-        "Cloth Comparison"
+        "Cloth Comparison",
+        "Constraint Comparison"
     };
 
     int previousScene = ui.selectedScene;
@@ -152,8 +153,9 @@ int main(int argc, char* argv[]) {
 
     scenes.push_back(std::make_unique<BasicCollisionScene>());
     scenes.push_back(std::make_unique<ClothComparisonScene>());
+    scenes.push_back(std::make_unique<ConstraintComparisonScene>());
 
-    int currentSceneIndex = 0;
+    int currentSceneIndex = ui.selectedScene;
     Scene* currentScene = scenes[currentSceneIndex].get();
 
     Solver solver(ui.solverIterations, 1.0f / 120.0f);
@@ -191,6 +193,10 @@ int main(int argc, char* argv[]) {
             0,        0,  (far+near)/(near-far),     (2*far*near)/(near-far),
             0,        0, -1,                          0;
 
+    int noSteps = 0;
+    std::chrono::high_resolution_clock::time_point timeStart;
+    bool timingStarted = false;
+
     while (!glfwWindowShouldClose(window)) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -217,8 +223,31 @@ int main(int argc, char* argv[]) {
         glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        if (ui.runSimulation) {
+        if (ui.runSimulation)
+        {
+            if (!timingStarted)
+            {
+                timeStart = std::chrono::high_resolution_clock::now();
+                timingStarted = true;
+            }
+
             solver.step();
+            /*noSteps++;
+
+            if (noSteps >= 120)
+            {
+                auto timeEnd = std::chrono::high_resolution_clock::now();
+
+                float elapsedMs =
+                    std::chrono::duration<float, std::milli>(timeEnd - timeStart).count();
+
+                std::cout << "Elapsed time for 120 steps: " << elapsedMs << " ms\n";
+                std::cout << "Average time per step: " << elapsedMs / 120.0f << " ms\n";
+                std::cout << solver.getParticles(0).size() << " particles\n";
+
+                ui.runSimulation = false;
+                timingStarted = false;
+            }*/
         }
 
         if (ui.resetSimulation)
@@ -226,6 +255,8 @@ int main(int argc, char* argv[]) {
             rebuildScene();
 
             ui.resetSimulation = false;
+            noSteps = 0;
+            timingStarted = false;
         }
 
         renderer.updateMeshFromParticles(solver.getParticles(0), solver.getFaces(0));

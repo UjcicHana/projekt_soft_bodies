@@ -459,11 +459,9 @@ float ContinuumTriangleConstraint::calculateValue()
 
     Eigen::Matrix<float, 3, 2> D;
 
-    D.col(0) =
-        x1 - x0;
+    D.col(0) = x1 - x0;
 
-    D.col(1) =
-        x2 - x0;
+    D.col(1) = x2 - x0;
 
     Eigen::Matrix<float, 3, 2> F =
         D * restDInv;

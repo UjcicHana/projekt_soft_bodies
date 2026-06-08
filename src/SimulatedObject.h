@@ -19,7 +19,7 @@ public:
     };
 
     struct MaterialSettings {
-        float distanceStiffness = 0.7f;
+        float distanceStiffness = 0.1f;
         float distanceCompliance = 5e-5f;
 
         float volumeStiffness = 0.2f;
